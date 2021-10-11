@@ -1,0 +1,29 @@
+PODS:
+  - BGSwift (0.5.0):
+    - BGSwift/Core (= 0.5.0)
+  - BGSwift/Core (0.5.0)
+  - Nimble (9.2.1)
+  - Quick (4.0.0)
+
+DEPENDENCIES:
+  - BGSwift (from `.`)
+  - Nimble (~> 9.2)
+  - Quick (~> 4.0)
+
+SPEC REPOS:
+  trunk:
+    - Nimble
+    - Quick
+
+EXTERNAL SOURCES:
+  BGSwift:
+    :path: "."
+
+SPEC CHECKSUMS:
+  BGSwift: 874ad974413a8ee2f2537245ecd5f0f9a3e1bf43
+  Nimble: e7e615c0335ee4bf5b0d786685451e62746117d5
+  Quick: 6473349e43b9271a8d43839d9ba1c442ed1b7ac4
+
+PODFILE CHECKSUM: f89ef0e6aae7f28f91489394e672d73b7409fae8
+
+COCOAPODS: 1.11.2
