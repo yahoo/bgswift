@@ -196,7 +196,7 @@ public class BGTypedMoment<Type>: BGTypedResource<Type?>, TransientResource {
         super.init(nil)
     }
     
-    public func update(_ newValue: Type, withAction: Bool = false) {
+    public func update(_ newValue: Type) {
         guard canUpdate else {
             return
         }
