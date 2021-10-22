@@ -15,7 +15,7 @@ DESC
 	    'Sean Levin' => 'slevin@yahooinc.com'
     }
     s.source = {
-      :git => 'git@github.com:yahoo/BGSwift.git',
+      :git => 'https://github.com/yahoo/bgswift.git',
       :tag => s.version.to_s
     }
     s.requires_arc = true
