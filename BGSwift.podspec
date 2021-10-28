@@ -19,6 +19,7 @@ DESC
       :tag => s.version.to_s
     }
     s.requires_arc = true
+    s.swift_versions = [4.0, 4.1, 4.2, 5.0, 5.1, 5.2, 5.3, 5.4, 5.5]
     
     s.default_subspecs = 'Core'
     
