@@ -5,7 +5,7 @@
 import Foundation
 
 protocol TransientResource {
-    func clearValue()
+    func clearTransientValue()
 }
 
 public protocol BGOptionalObject {
@@ -197,17 +197,17 @@ public class BGTypedMoment<Type>: BGTypedResource<Type?>, TransientResource {
     }
     
     public func update(_ newValue: Type) {
-        guard canUpdate else {
+        guard canUpdate, let graph = graph, let currentEvent = graph.currentEvent else {
             return
         }
         
         previousEvent = eventDirectAccess;
         
         value = newValue
-        event = graph!.currentEvent!
+        event = currentEvent
         
-        graph!.updatedResources.append(self)
-        graph!.updatedTransientResources.append(self)
+        graph.updatedResources.append(self)
+        graph.updatedTransientResources.append(self)
     }
     
     public func updateWithAction(_ newValue: Type, file: String = #fileID, line: Int = #line, function: String = #function, syncStrategy: BGGraph.SynchronizationStrategy? = nil) {
@@ -222,21 +222,25 @@ public class BGTypedMoment<Type>: BGTypedResource<Type?>, TransientResource {
         }
     }
 
-    func clearValue() {
+    func clearTransientValue() {
         value = nil
     }
     
     public var updatedValue: ReadableValueType { value }
 }
 
-public class BGState<Type>: BGTypedResource<Type> {
+public class BGState<Type>: BGTypedResource<Type>, TransientResource {
     public typealias ReadableValueType = Type
     
     private var comparison: ((Type, Type) -> Bool)?
-    private var previousValue: Type
+    private var previousValue: Type?
     
     public var traceValue: Type {
-        get { eventDirectAccess.sequence == graph?.currentEvent?.sequence ? previousValue : valueDirectAccess }
+        if let previousValue = previousValue {
+            return previousValue
+        } else {
+            return valueDirectAccess
+        }
     }
     
     init(_ value: Type, name: String? = nil, comparison: ((Type, Type) -> Bool)?) {
@@ -244,9 +248,7 @@ public class BGState<Type>: BGTypedResource<Type> {
         self.previousValue = value
         super.init(value, name: name)
     }
-}
-
-extension BGState {
+    
     func commitUpdate(_ newValue: Type) {
         guard let graph = self.graph, let currentEvent = graph.currentEvent else {
             return
@@ -259,6 +261,7 @@ extension BGState {
         event = currentEvent
         
         graph.updatedResources.append(self)
+        graph.updatedTransientResources.append(self)
     }
     
     func valueEquals(_ other: Type) -> Bool {
@@ -305,5 +308,9 @@ extension BGState {
             return false
         }
         return comparison(valueDirectAccess, to) && comparison(traceValue, from)
+    }
+    
+    func clearTransientValue() {
+        previousValue = nil
     }
 }

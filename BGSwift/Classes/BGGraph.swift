@@ -173,7 +173,7 @@ public class BGGraph {
                     
                     if !updatedTransientResources.isEmpty {
                         while !updatedTransientResources.isEmpty {
-                            updatedTransientResources.removeFirst().clearValue()
+                            updatedTransientResources.removeFirst().clearTransientValue()
                         }
                         return
                     }
@@ -284,13 +284,13 @@ public class BGGraph {
                 
                 if !addedDemands.isEmpty {
                     var needsOrdering: Bool = false
-                    var needsRunning: Bool = false
+                    var demandJustUpdated: Bool = false
                     for demand in addedDemands {
                         demand.subsequents.add(behavior)
                         behavior.demands.add(demand)
                         
                         if demand.justUpdated() {
-                            needsRunning = true
+                            demandJustUpdated = true
                         }
                         
                         if !needsOrdering,
@@ -303,7 +303,8 @@ public class BGGraph {
                     if needsOrdering {
                         self.needsOrdering.append(behavior)
                     }
-                    if needsRunning {
+                    
+                    if demandJustUpdated {
                         self.submitToQueue(behavior)
                     }
                 }
@@ -374,7 +375,6 @@ public class BGGraph {
         // algorithm, not a misconfigured graph
         // jlou 2/5/19 - These asserts are checking for graph implementation bugs, not for user error.
         assert(eventLoopState?.processingChanges ?? false, "Should not be activating behaviors in current phase.")
-        assert(behavior.lastUpdateSequence != sequence, "Behavior already ran.")
         
         if behavior.enqueuedSequence < sequence {
             behavior.enqueuedSequence = sequence

@@ -159,6 +159,7 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
         }
         
         var extendedDemands = staticDemands
+        var extendedSupplies = staticSupplies
         let dynamicSuppliesOrderingResource: BGResource?
         let dynamicDemandsOrderingResource: BGResource?
         
@@ -167,7 +168,13 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
             orderingResource.propertyName = "DynamicSuppliesOrdering"
             
             dynamicSuppliesOrderingResource = orderingResource
-            extendedDemands.append(orderingResource)
+            
+            switch dynamicSupplies.order {
+            case .pre:
+                extendedDemands.append(orderingResource)
+            case .post:
+                extendedSupplies.append(orderingResource)
+            }
         } else {
             dynamicSuppliesOrderingResource = nil
         }
@@ -177,24 +184,40 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
             orderingResource.propertyName = "DynamicDemandsOrdering"
             
             dynamicDemandsOrderingResource = orderingResource
-            extendedDemands.append(orderingResource)
+            
+            switch dynamicDemands.order {
+            case .pre:
+                extendedDemands.append(orderingResource)
+            case .post:
+                extendedSupplies.append(orderingResource)
+            }
         } else {
             dynamicDemandsOrderingResource = nil
         }
         
-        let behavior = BGBehavior(supplies: staticSupplies,
+        let behavior = BGBehavior(supplies: extendedSupplies,
                                   demands: extendedDemands,
                                   body: genericBody)
         behaviors.append(behavior)
         
         if let dynamicSupplies = dynamicSupplies, let orderingResource = dynamicSuppliesOrderingResource {
             let resolver = dynamicSupplies.resolver
-            let implicitBehavior = BGBehavior(supplies: [orderingResource], demands: dynamicSupplies.switches) { [weak behavior] extent in
+            
+            var implicitBehaviorSupplies = [BGResource]()
+            var implicitBehaviorDemands = dynamicSupplies.switches
+            switch dynamicSupplies.order {
+            case .pre:
+                implicitBehaviorSupplies.append(orderingResource)
+            case .post:
+                implicitBehaviorDemands.append(orderingResource)
+            }
+            
+            let implicitBehavior = BGBehavior(supplies: implicitBehaviorSupplies, demands: implicitBehaviorDemands) { [weak behavior] extent in
                 guard let behavior = behavior else {
                     return
                 }
                 var supplies = staticSupplies
-                supplies.append(contentsOf: resolver(extent as! Extent))
+                supplies.append(contentsOf: resolver(extent as! Extent).compactMap { $0 })
                 behavior.setSupplies(supplies)
             }
             behaviors.append(implicitBehavior)
@@ -202,12 +225,22 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
         
         if let dynamicDemands = dynamicDemands, let orderingResource = dynamicDemandsOrderingResource {
             let resolver = dynamicDemands.resolver
-            let implicitBehavior = BGBehavior(supplies: [orderingResource], demands: dynamicDemands.switches) { [weak behavior] extent in
+            
+            var implicitBehaviorSupplies = [BGResource]()
+            var implicitBehaviorDemands = dynamicDemands.switches
+            switch dynamicDemands.order {
+            case .pre:
+                implicitBehaviorSupplies.append(orderingResource)
+            case .post:
+                implicitBehaviorDemands.append(orderingResource)
+            }
+            
+            let implicitBehavior = BGBehavior(supplies: implicitBehaviorSupplies, demands: implicitBehaviorDemands) { [weak behavior] extent in
                 guard let behavior = behavior else {
                     return
                 }
                 var demands = extendedDemands
-                demands.append(contentsOf: resolver(extent as! Extent))
+                demands.append(contentsOf: resolver(extent as! Extent).compactMap { $0 })
                 behavior.setDemands(demands)
             }
             behaviors.append(implicitBehavior)
@@ -219,10 +252,17 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
 
 public class DynamicResourceLink<Extent: BGExtent> {
     var switches: [BGResource]
-    var resolver: (Extent) -> ([BGResource])
+    var order: OrderingType
+    var resolver: (Extent) -> ([BGResource?])
     
-    public init(switches: [BGResource], _ resolver: @escaping (Extent) -> ([BGResource])) {
+    public enum OrderingType {
+        case pre
+        case post
+    }
+    
+    public init(switches: [BGResource], order: OrderingType, _ resolver: @escaping (Extent) -> ([BGResource?])) {
         self.switches = switches
+        self.order = order
         self.resolver = resolver
     }
 }
