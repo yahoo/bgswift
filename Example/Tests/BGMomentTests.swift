@@ -77,16 +77,24 @@ class BGMomentTests: XCTestCase {
     func testTypedMomentsAreTransient() {
         // NOTE this default prevents retaining data that no longer is needed
         
+        class ClassType { }
+        
         // |> Given a moment with data
-        let mr1: BGTypedMoment<Int> = bld.typedMoment()
+        let mr1: BGTypedMoment<ClassType> = bld.typedMoment()
         ext = BGExtent(builder: bld)
         ext.addToGraphWithAction()
 
         // |> When current event is over
-        mr1.updateWithAction(1)
+        weak var weakValue: ClassType?
+        autoreleasepool {
+            let value = ClassType()
+            weakValue = value
+            mr1.updateWithAction(value)
+        }
 
-        // |> Then value nils out
+        // |> Then value nils out and is not retained
         XCTAssertNil(mr1.value)
+        XCTAssertNil(weakValue)
     }
     
     func testNonSuppliedMomentsCanUpdateBeforeAdding() {
@@ -208,5 +216,4 @@ class BGMomentTests: XCTestCase {
         // |> Then the updating chould throw
         XCTAssertTrue(updateFailed)
     }
-
 }
