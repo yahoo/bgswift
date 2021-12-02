@@ -164,11 +164,6 @@ class BGStateTests : QuickSpec {
                 expect(r_a.traceEvent) == g.lastEvent
             }
             
-            xit("internal state is transient after event") {
-                // need to test that state is cleared internally
-                // how to access private?
-            }
-            
             it("can update resource during same event as adding") {
                 // @SAL this doesn't work yet, can't add and update in the same event
                 var didRun = false
@@ -589,5 +584,23 @@ class BGStateUpdateTests: XCTestCase {
             s.update(obj2)
             XCTAssertTrue(s.justUpdated())
         }
+    }
+    
+    func testPreviousValueIsNotRetainedAfterAction() {
+        class ClassType {}
+        
+        weak var weakValue: ClassType?
+        let state: BGState<ClassType> = b.state(ClassType())
+        let extent = BGExtent(builder: b)
+        extent.addToGraphWithAction()
+        
+        weakValue = state.value
+        XCTAssertNotNil(weakValue)
+        
+        autoreleasepool {
+            state.updateWithAction(ClassType())
+        }
+        
+        XCTAssertNil(weakValue)
     }
 }

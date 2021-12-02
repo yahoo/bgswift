@@ -712,4 +712,27 @@ class DynamicsTests: XCTestCase {
         }
         XCTAssertFalse(failed)
     }
+    
+    func testDynamicsClosureFiltersNilResources() {
+        let r_a: BGState<Int> = b.state(0)
+        let r_b: BGState<Int> = b.state(0)
+        let r_c: BGState<Int> = b.state(0)
+        let r_d: BGState<Int> = b.state(0)
+        
+        let bhv = b.behavior(dynamicSupplies: .init(switches: [b.added], order: .pre, { _ in
+            [r_a, nil, r_b, nil]
+        }),
+                             dynamicDemands: .init(switches: [b.added], order: .post, { _ in
+            [nil, r_c, nil, r_d]
+        })) { _ in
+            // do nothing
+        }
+        
+        let extent = BGExtent(builder: b)
+        extent.addToGraphWithAction()
+        XCTAssertTrue(bhv.supplies.contains(r_a))
+        XCTAssertTrue(bhv.supplies.contains(r_b))
+        XCTAssertTrue(bhv.demands.contains(r_c))
+        XCTAssertTrue(bhv.demands.contains(r_d))
+    }
 }
