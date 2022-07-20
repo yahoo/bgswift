@@ -145,7 +145,7 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
     
     @discardableResult public func behavior(supplies staticSupplies: [BGResource] = [],
                                             demands staticDemands: [BGResource] = [],
-                                            body: @escaping (Extent) -> Void) -> BGBehavior {
+                                            body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
         return behavior(supplies: staticSupplies, demands: staticDemands, dynamicSupplies: nil, dynamicDemands: nil, body: body)
     }
     
@@ -153,7 +153,7 @@ public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
                                             demands staticDemands: [BGResource] = [],
                                             dynamicSupplies: DynamicResourceLink<Extent>? = nil,
                                             dynamicDemands: DynamicResourceLink<Extent>? = nil,
-                                            body: @escaping (Extent) -> Void) -> BGBehavior {
+                                            body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
         let genericBody: (BGExtent) -> Void = { extent in
             body(extent as! Extent)
         }
