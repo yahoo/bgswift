@@ -30,67 +30,77 @@ class LoginExtent: BGExtent {
         loginComplete = bld.typedMoment()
 
         
-        bld.behavior(supplies: [emailValid], demands: [email, bld.added]) { extent in
-            extent.emailValid.update(LoginExtent.validEmailAddress(extent.email.value))
-            extent.sideEffect {
-                extent.loginForm?.emailFeedback.text = extent.emailValid.value ? "✅" : "❌"
-            }
-        }
-        
-        
-        bld.behavior(supplies: [passwordValid], demands: [password, bld.added]) { extent in
-            extent.passwordValid.update(extent.password.value.count > 0)
-            extent.sideEffect {
-                extent.loginForm?.passwordFeedback.text = extent.passwordValid.value ? "✅" : "❌"
-            }
-        }
-        
-        
-        bld.behavior(supplies: [loginEnabled], demands: [emailValid, passwordValid, loggingIn, bld.added]) { extent in
-            let enabled = extent.emailValid.value && extent.passwordValid.value && !extent.loggingIn.value;
-            extent.loginEnabled.update(enabled)
-            extent.sideEffect {
-                extent.loginForm?.loginButton.isEnabled = extent.loginEnabled.value
-            }
-        }
-        
-        
-        bld.behavior(supplies: [loggingIn], demands: [loginClick, loginComplete, bld.added]) { extent in
-            if extent.loginClick.justUpdated() && extent.loginEnabled.traceValue {
-                extent.loggingIn.update(true)
-            } else if extent.loginComplete.justUpdated() && extent.loggingIn.value {
-                extent.loggingIn.update(false)
-            }
-            
-            if extent.loggingIn.justUpdated(to: true) {
+        bld.behavior()
+            .supplies([emailValid])
+            .demands([email, bld.added])
+            .runs { extent in
+                extent.emailValid.update(LoginExtent.validEmailAddress(extent.email.value))
                 extent.sideEffect {
-                    extent.loginCall(email: extent.email.value, password: extent.password.value) { success in
-                        
-                        extent.graph?.action {
-                            extent.loginComplete.update(success)
+                    extent.loginForm?.emailFeedback.text = extent.emailValid.value ? "✅" : "❌"
+                }
+            }
+        
+        bld.behavior()
+            .supplies([passwordValid])
+            .demands([password, bld.added])
+            .runs { extent in
+                extent.passwordValid.update(extent.password.value.count > 0)
+                extent.sideEffect {
+                    extent.loginForm?.passwordFeedback.text = extent.passwordValid.value ? "✅" : "❌"
+                }
+            }
+        
+        bld.behavior()
+            .supplies([loginEnabled])
+            .demands([emailValid, passwordValid, loggingIn, bld.added])
+            .runs { extent in
+                let enabled = extent.emailValid.value && extent.passwordValid.value && !extent.loggingIn.value;
+                extent.loginEnabled.update(enabled)
+                extent.sideEffect {
+                    extent.loginForm?.loginButton.isEnabled = extent.loginEnabled.value
+                }
+            }
+        
+        bld.behavior()
+            .supplies([loggingIn])
+            .demands([loginClick, loginComplete, bld.added])
+            .runs { extent in
+                if extent.loginClick.justUpdated() && extent.loginEnabled.traceValue {
+                    extent.loggingIn.update(true)
+                } else if extent.loginComplete.justUpdated() && extent.loggingIn.value {
+                    extent.loggingIn.update(false)
+                }
+                
+                if extent.loggingIn.justUpdated(to: true) {
+                    extent.sideEffect {
+                        extent.loginCall(email: extent.email.value, password: extent.password.value) { success in
+                            
+                            extent.graph.action {
+                                extent.loginComplete.update(success)
+                            }
+                            
                         }
-                        
                     }
                 }
             }
-        }
         
-        
-        bld.behavior(supplies: [], demands: [loggingIn, loginComplete, bld.added]) { extent in
-            extent.sideEffect {
-                var status = ""
-                if extent.loggingIn.value {
-                    status = "Logging in...";
-                } else {
-                    if extent.loginComplete.justUpdated() && extent.loginComplete.value! {
-                        status = "Login Success"
-                    } else if extent.loginComplete.justUpdated() && !extent.loginComplete.value! {
-                        status = "Login Failed"
+        bld.behavior()
+            .demands([loggingIn, loginComplete, bld.added])
+            .runs { extent in
+                extent.sideEffect {
+                    var status = ""
+                    if extent.loggingIn.value {
+                        status = "Logging in...";
+                    } else if let loginComplete = extent.loginComplete.updatedValue {
+                        if loginComplete {
+                            status = "Login Success"
+                        } else {
+                            status = "Login Failed"
+                        }
                     }
+                    extent.loginForm?.loginStatus.text = status;
                 }
-                extent.loginForm?.loginStatus.text = status;
             }
-        }
         
         super.init(builder: bld)
 

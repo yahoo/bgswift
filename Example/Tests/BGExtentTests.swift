@@ -31,10 +31,13 @@ class BGExtentTests: XCTestCase {
         // |> Given an extent
         var run = false
         var nonAddedRun = false
-        b.behavior(supplies: [], demands: [b.added]) { extent in
+        b.behavior().demands([b.added]).runs { extent in
             run = true
         }
-        b.behavior(supplies: [], demands: []) { extent in
+        b.behavior().demands([b.added]).runs { extent in
+            run = true
+        }
+        b.behavior().runs { extent in
             nonAddedRun = true
         }
         e = BGExtent(builder: b)
@@ -73,6 +76,17 @@ class BGExtentTests: XCTestCase {
         }
     }
     
+    func testCheckExtentCanOnlyBeRemovedDuringEvent() {
+        // |> Given an extent
+        e = BGExtent(builder: b)
+        e.addToGraphWithAction()
+        
+        // |> When added outside an event
+        // |> Then there is an error
+        TestAssertionHit {
+            e.removeFromGraph()
+        }
+    }
     
     class MyExtent: BGExtent {
         let r1: BGMoment
@@ -87,7 +101,7 @@ class BGExtentTests: XCTestCase {
     func testResourcePropertiesGetNames() {
         let e2 = MyExtent(graph: self.g)
         
-        XCTAssertEqual(e2.r1.propertyName, "MyExtent.r1")
+        XCTAssertEqual(e2.r1.debugName, "MyExtent.r1")
     }
     
 }

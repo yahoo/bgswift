@@ -16,11 +16,11 @@ class AssertionTests: XCTestCase {
         let b = BGExtentBuilder(graph: g)
         let r = b.moment()
         
-        b.behavior(supplies: [r]) { _ in
+        b.behavior().supplies([r]).runs { _ in
             // do nothing
         }
         
-        b.behavior(demands: [b.added]) { extent in
+        b.behavior().demands([b.added]).runs { extent in
             assertionHit = CheckAssertionHit {
                 _ = r.justUpdated()
             }
@@ -40,7 +40,7 @@ class AssertionTests: XCTestCase {
         let b = BGExtentBuilder(graph: g)
         let r = b.moment()
         
-        b.behavior(demands: [b.added]) { extent in
+        b.behavior().demands([b.added]).runs { extent in
             assertionHit = CheckAssertionHit {
                 _ = r.justUpdated()
             }

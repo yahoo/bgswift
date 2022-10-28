@@ -69,11 +69,11 @@ class BGStateTests : QuickSpec {
             it("works as demand and supply") {
                 // |> Given state resources and behaviors
                 var ran = false;
-                bld.behavior(supplies: [r_b], demands: [r_a]) { extent in
+                bld.behavior().supplies([r_b]).demands([r_a]).runs { extent in
                     r_b.update(r_a.value)
                 }
 
-                bld.behavior(supplies:[], demands:[r_b]) { extent in
+                bld.behavior().demands([r_b]).runs { extent in
                     ran = true
                 }
                 ext = BGExtent(builder: bld)
@@ -102,7 +102,7 @@ class BGStateTests : QuickSpec {
                 var updatedFromB = false
                 
                 // |> Given a behavior that tracks updated methods
-                bld.behavior(supplies:[], demands:[r_a, r_b]) { extent in
+                bld.behavior().demands([r_a, r_b]).runs { extent in
                     updatedA = r_a.justUpdated()
                     updatedB = r_b.justUpdated()
                     updatedToA = r_a.justUpdated(to: 1)
@@ -146,7 +146,7 @@ class BGStateTests : QuickSpec {
                 var beforeEvent: BGEvent? = nil
                 
                 // |> Given a behavior that accesses trace
-                bld.behavior(supplies:[], demands:[r_a]) { extent in
+                bld.behavior().demands([r_a]).runs { extent in
                     beforeValue = r_a.traceValue
                     beforeEvent = r_a.traceEvent
                 }
@@ -167,7 +167,7 @@ class BGStateTests : QuickSpec {
             it("can update resource during same event as adding") {
                 // @SAL this doesn't work yet, can't add and update in the same event
                 var didRun = false
-                bld.behavior(supplies:[], demands:[r_a]) { extent in
+                bld.behavior().demands([r_a]).runs { extent in
                     didRun = true
                 }
                 ext = BGExtent(builder: bld)
@@ -196,7 +196,7 @@ class BGStateTests : QuickSpec {
                 it("ensures canUpdate checks are run") {
                     // NOTE: there are multiple canUpdate checks, this just ensures that
                     // code path is followed
-                    bld.behavior(supplies: [], demands: [r_a]) { extent in
+                    bld.behavior().demands([r_a]).runs { extent in
                         r_b.update(r_a.value)
                     }
                     ext = BGExtent(builder: bld)

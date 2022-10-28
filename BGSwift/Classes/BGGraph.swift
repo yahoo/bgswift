@@ -25,11 +25,15 @@ public class BGGraph {
     
     var behaviorsWithModifiedSupplies = [BGBehavior]()
     var behaviorsWithModifiedDemands = [BGBehavior]()
-    var updatedResources = [BGResource]()
+    var updatedResources = [BGResourceInternal]()
     private var untrackedBehaviors = [BGBehavior]()
     private var needsOrdering = [BGBehavior]()
     
     var currentRunningBehavior: BGBehavior?
+    
+    static var checkUndeclaredDemands: Bool {
+        ProcessInfo.processInfo.arguments.contains("-BGGraphVerifyDemands")
+    }
     
     public var currentEvent: BGEvent? {
         get { eventLoopState?.event }
@@ -112,44 +116,51 @@ public class BGGraph {
         while !finished {
             autoreleasepool {
                 if let eventLoopState = self.eventLoopState {
-                
+
                     if eventLoopState.processingChanges {
-                        
+
                         if !untrackedBehaviors.isEmpty {
                             commitUntrackedBehaviors()
                             return
                         }
-                        
+
                         if !behaviorsWithModifiedSupplies.isEmpty {
                             commitModifiedSupplies()
                         }
-                        
+
                         if !behaviorsWithModifiedDemands.isEmpty {
                             commitModifiedDemands()
                         }
-                        
+
                         if !needsOrdering.isEmpty {
                             orderBehaviors()
                         }
-                        
+
                         if !updatedResources.isEmpty {
                             updatedResources.forEach {
                                 for subsequent in $0.subsequents {
-                                    submitToQueue(subsequent)
+                                    switch subsequent.type {
+                                    case .reactive:
+                                        if let behavior = subsequent.behavior {
+                                            submitToQueue(behavior)
+                                        }
+                                    case .order:
+                                        break
+                                    }
                                 }
                             }
                             updatedResources.removeAll()
                         }
-                        
+
                         if !behaviorQueue.isEmpty {
-                            
+
                             let behavior = behaviorQueue.pop()
-                            
+
                             let currentSequence = eventLoopState.event.sequence
                             if behavior.removedSequence != currentSequence {
                                 behavior.lastUpdateSequence = currentSequence
-                                
-                                if let extent = behavior.extent {
+
+                                if let extent = behavior.owner {
                                     currentRunningBehavior = behavior
                                     behavior.runBlock(extent)
                                     currentRunningBehavior = nil
@@ -158,9 +169,9 @@ public class BGGraph {
                             return
                         }
                     }
-                    
+
                     eventLoopState.processingChanges = false
-                    
+
                     if !sideEffectQueue.isEmpty {
                         executeSideEffect {
                             while !sideEffectQueue.isEmpty {
@@ -170,43 +181,50 @@ public class BGGraph {
                         }
                         return
                     }
-                    
+
                     if !updatedTransientResources.isEmpty {
                         while !updatedTransientResources.isEmpty {
                             updatedTransientResources.removeFirst().clearTransientValue()
                         }
                         return
                     }
-                    
+
                     if !deferredRelease.isEmpty {
-                        deferredRelease.removeAll()
+                        autoreleasepool {
+                            // Temporarily retain values on the stack so that `removeAll()` is completed before any object
+                            // is released to avoid a crash for calling `deferredRelease.isEmpty` above while `deferredRelease` is
+                            // being modified (in the case where object's dealloc triggers a synchronous action)
+                            let toRelease = deferredRelease
+                            _ = toRelease // This line is needed to silence the warning that `toRelease` is never used.
+                            deferredRelease.removeAll()
+                        }
                         return
                     }
-                    
+
                     self._lastEvent = eventLoopState.event
-                    
+
                     self.eventLoopState = nil
                 }
-                
+
                 if let action = actionQueue.first {
                     actionQueue.removeFirst()
-                    
+
                     let currentDate = self.currentDate()
                     sequence += 1
                     let event = BGEvent(sequence: sequence, timestamp: currentDate, impulse: action.impulse)
-                    
+
                     let eventLoopState = EventLoopState(event: event)
                     self.eventLoopState = eventLoopState
-                    
+
                     action.action()
                     eventLoopState.processingAction = false
-                    
+
                     // NOTE: We keep the action block around because it may capture capture and retain some external objects
                     // If it were to go away right after running then that might cause a dealloc to be called as it goes out of scope internal
                     // to the event loop and thus create a side effect during the update phase.
                     // So we keep it around until after all updates are processed.
                     deferredRelease.append(action)
-                    
+
                     return
                 }
                 
@@ -217,11 +235,11 @@ public class BGGraph {
     
     private func commitUntrackedBehaviors() {
         for behavior in untrackedBehaviors {
-            if behavior.modifiedSupplies != nil {
+            if behavior.uncommittedSupplies  {
                 behaviorsWithModifiedSupplies.append(behavior)
             }
             
-            if behavior.modifiedDemands != nil {
+            if behavior.uncommittedDemands {
                 behaviorsWithModifiedDemands.append(behavior)
             }
         }
@@ -230,37 +248,59 @@ public class BGGraph {
     
     private func commitModifiedSupplies() {
         for behavior in behaviorsWithModifiedSupplies {
-            if let modifiedSupplies = behavior.modifiedSupplies {
-                let removedSupplies = behavior.supplies.filter {
-                    return !modifiedSupplies.contains($0)
-                }
-                let addedSupplies = modifiedSupplies.filter {
-                    guard $0.supplier === behavior || $0.supplier == nil else {
-                        assertionFailure("Resource is already supplied by a different behavior.")
+            if behavior.uncommittedSupplies {
+                let oldSupplies = behavior.supplies
+                var newSupplies = behavior.staticSupplies.filter {
+                    guard let _ = $0.resource else {
                         return false
                     }
-                    return !behavior.supplies.contains($0)
+                    return true
                 }
+                behavior.uncommittedDynamicSupplies?.forEach {
+                    let supplier = $0.supplier
+                    guard supplier === behavior || supplier == nil else {
+                        assertionFailure("Resource is already supplied by a different behavior.")
+                        return
+                    }
+                    newSupplies.insert($0.weakReference)
+                }
+                behavior.supplies = newSupplies
+                
+                let removedSupplies = oldSupplies.subtracting(newSupplies)
+                let addedSupplies = newSupplies.subtracting(oldSupplies)
                 
                 for supply in removedSupplies {
-                    supply.supplier = nil
+                    supply.resource?.supplier = nil
                     behavior.supplies.remove(supply)
                 }
                 
                 if !addedSupplies.isEmpty {
                     for supply in addedSupplies {
-                        supply.supplier = behavior
-                        behavior.supplies.add(supply)
+                        guard let resource = supply.resource else {
+                            continue
+                        }
+                        resource.supplier = behavior
+                        behavior.supplies.insert(supply)
                         
-                        for subsequent in supply.subsequents {
+                        var deadLinks = [BGSubsequentLink]()
+                        for link in resource.subsequents {
+                            guard let subsequent = link.behavior else {
+                                deadLinks.append(link)
+                                continue
+                            }
+                            
                             if subsequent.order <= behavior.order {
                                 needsOrdering.append(subsequent)
                             }
                         }
+                        deadLinks.forEach {
+                            resource.subsequents.remove($0)
+                        }
                     }
                 }
                 
-                behavior.modifiedSupplies = nil
+                behavior.uncommittedDynamicSupplies = nil
+                behavior.uncommittedSupplies = false
             }
         }
         behaviorsWithModifiedSupplies.removeAll()
@@ -268,33 +308,50 @@ public class BGGraph {
     
     private func commitModifiedDemands() {
         for behavior in behaviorsWithModifiedDemands {
-            if let modifiedDemands = behavior.modifiedDemands {
-                let removedDemands = behavior.demands.filter {
-                    return !modifiedDemands.contains($0)
-                }
-                let addedDemands = modifiedDemands.filter {
-                    assert($0.extent?.graph === self, "Demanded resource has not been added to the graph: \($0.debugDescription)")
-                    return !behavior.demands.contains($0)
-                }
+            if behavior.uncommittedDemands {
+                let oldDemands = behavior.demands
                 
-                for demand in removedDemands {
-                    demand.subsequents.remove(behavior)
-                    behavior.demands.remove(demand)
+                var newDemands = behavior.staticDemands.filter {
+                    guard let _ = $0.resource else {
+                        return false
+                    }
+                    return true
+                }
+                behavior.uncommittedDynamicDemands?.forEach {
+                    let link = $0.link
+                    guard let _ = link.resource else {
+                        return
+                    }
+                    newDemands.insert(link)
+                }
+                behavior.demands = newDemands
+                
+                let removedDemands = oldDemands.subtracting(newDemands)
+                let addedDemands = newDemands.subtracting(oldDemands)
+                
+                removedDemands.forEach {
+                    guard let resource = $0.resource else {
+                        return
+                    }
+                    resource.subsequents.remove(.init(behavior: behavior, type: $0.type))
                 }
                 
                 if !addedDemands.isEmpty {
                     var needsOrdering: Bool = false
-                    var demandJustUpdated: Bool = false
+                    var reactiveDemandJustUpdated: Bool = false
+                    
                     for demand in addedDemands {
-                        demand.subsequents.add(behavior)
-                        behavior.demands.add(demand)
+                        guard let resource = demand.resource else {
+                            continue
+                        }
+                        resource.subsequents.insert(.init(behavior: behavior, type: demand.type))
                         
-                        if demand.justUpdated() {
-                            demandJustUpdated = true
+                        if demand.type == .reactive && resource.justUpdated() {
+                            reactiveDemandJustUpdated = true
                         }
                         
                         if !needsOrdering,
-                           let prior = demand.supplier,
+                           let prior = resource.supplier,
                            prior.order >= behavior.order {
                             needsOrdering = true
                         }
@@ -304,12 +361,13 @@ public class BGGraph {
                         self.needsOrdering.append(behavior)
                     }
                     
-                    if demandJustUpdated {
+                    if reactiveDemandJustUpdated {
                         self.submitToQueue(behavior)
                     }
                 }
                 
-                behavior.modifiedDemands = nil
+                behavior.uncommittedDynamicDemands = nil
+                behavior.uncommittedDemands = false
             }
         }
         behaviorsWithModifiedDemands.removeAll()
@@ -327,7 +385,7 @@ public class BGGraph {
                 needsOrdering.append(behavior)
                 
                 for supply in behavior.supplies {
-                    traversalQueue.append(contentsOf: supply.subsequents)
+                    (supply.resource?.subsequents.compactMap({ $0.behavior })).map { traversalQueue.append(contentsOf: $0) }
                 }
             }
         }
@@ -353,14 +411,22 @@ public class BGGraph {
             behavior.orderingState = .ordering
             
             var order = UInt(1)
+            var deadLinks = [BGDemandLink]()
             for demand in behavior.demands {
-                if let prior = demand.supplier {
+                guard let demandedResource = demand.resource else {
+                    deadLinks.append(demand)
+                    continue
+                }
+                
+                if let prior = demandedResource.supplier {
                     if prior.orderingState != .ordered {
                         sortDFS(behavior: prior, needsReheap: &needsReheap)
                     }
                     order = max(order, prior.order + 1)
                 }
             }
+            
+            deadLinks.forEach { behavior.demands.remove($0) }
             
             behavior.orderingState = .ordered
             if order != behavior.order {
@@ -388,7 +454,7 @@ public class BGGraph {
             assertionFailure("Extents must be added during an event.")
             return
         }
-        guard extent._added.eventDirectAccess == BGEvent.unknownPast else {
+        guard extent._added._event == BGEvent.unknownPast else {
             assertionFailure("Extent can only be added once.")
             return
         }
@@ -413,22 +479,36 @@ public class BGGraph {
         behaviorsWithModifiedSupplies.append(behavior)
     }
     
-    func removeBehavior(_ behavior: BGBehavior) {
+    func removeExtent(resources: [BGResourceInternal], behaviors: [BGBehavior]) {
         guard let eventLoopState = eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only remove behaviors during an event.")
+            assertionFailure("Can only remove extents during an event.")
             return
         }
         
-        for supply in behavior.supplies {
-            supply.supplier = nil
+        resources.forEach { resource in
+            resource.subsequents.forEach { subsequentLink in
+                subsequentLink.behavior?.demands.remove(.init(resource: resource, type: subsequentLink.type))
+            }
+            resource.subsequents.removeAll()
+            
+            if let supplier = resource.supplier {
+                supplier.supplies.remove(resource.weakReference)
+            }
         }
         
-        for demand in behavior.demands {
-            demand.subsequents.remove(behavior)
+        behaviors.forEach { behavior in
+            for supply in behavior.supplies {
+                supply.resource?.supplier = nil
+            }
+            behavior.supplies.removeAll()
+            
+            behavior.demands.forEach { demandLink in
+                demandLink.resource?.subsequents.remove(.init(behavior: behavior, type: demandLink.type))
+            }
+            behavior.demands.removeAll()
+            
+            behavior.removedSequence = eventLoopState.event.sequence
         }
-        behavior.demands.removeAll()
-        
-        behavior.removedSequence = eventLoopState.event.sequence
     }
     
     func executeSideEffect(_ work: () -> Void) {

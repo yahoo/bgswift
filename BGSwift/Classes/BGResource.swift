@@ -19,37 +19,72 @@ extension Optional: BGOptionalObject where Wrapped: AnyObject {
     }
 }
 
-public class BGResource {
-    public enum ComparisonNone { case none }
-    public enum ComparisonEqual { case equal }
-    public enum ComparisonIdentical { case identical }
+public protocol BGResource: AnyObject, BGDemandable {
+    var event: BGEvent { get }
+    var traceEvent: BGEvent { get }
+    var order: BGDemandable { get }
+    func justUpdated() -> Bool
+    func hasUpdated() -> Bool
+}
+
+internal extension BGResource {
+    @inline (__always)
+    var asInternal: BGResourceInternal { self as! BGResourceInternal }
+}
+
+protocol BGResourceInternal: AnyObject, BGResource, CustomDebugStringConvertible {
+    var subsequents: Set<BGSubsequentLink> { get set }
+    var supplier: BGBehavior? { get set }
+    var owner: BGExtent? { get set }
+    var _event: BGEvent { get set }
+    var _prevEvent: BGEvent { get set }
+    var debugName: String? { get set }
+}
+
+struct WeakResource: Equatable, Hashable {
+    weak var resource: BGResourceInternal?
+    let resourcePtr: ObjectIdentifier
     
-    var subsequents = WeakSet<BGBehavior>()
-    weak var supplier: BGBehavior?
-    weak var extent: BGExtent?
-    var graph: BGGraph? {
-        get { extent?.graph }
+    init(_ resource: BGResourceInternal) {
+        self.resource = resource
+        resourcePtr = ObjectIdentifier(resource)
     }
     
-    private var _event = BGEvent.unknownPast
-    public internal(set) var event: BGEvent {
-        get {
-            verifyDemands()
-            return _event
+    // MARK: Equatable
+    
+    static func == (lhs: WeakResource, rhs: WeakResource) -> Bool {
+        guard let l = lhs.resource, let r = rhs.resource, l === r else {
+            return false
         }
-        
-        set { _event = newValue }
+        return true
     }
     
-    var eventDirectAccess: BGEvent { _event }
+    // MARK: Hashable
     
-    var previousEvent = BGEvent.unknownPast
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(resourcePtr)
+    }
+}
+
+enum BGResourceUpdatable {
+    case notUpdatable
+    case updateable(graph: BGGraph, currentEvent: BGEvent)
+}
+
+extension BGResourceInternal {
+    var graph: BGGraph? { owner?.graph }
+    public var event: BGEvent {
+        verifyDemands()
+        return _event
+    }
     
     public var traceEvent: BGEvent {
-        return _event.sequence == graph?.currentEvent?.sequence ? previousEvent : _event
+        _event.sequence == graph?.currentEvent?.sequence ? _prevEvent : _event
     }
     
-    var propertyName: String?
+    public var order: BGDemandable {
+        BGDemandLink(resource: self, type: .order)
+    }
     
     public func justUpdated() -> Bool {
         guard let currentEvent = graph?.currentEvent else {
@@ -59,80 +94,69 @@ public class BGResource {
         return currentEvent.sequence == event.sequence
     }
     
-    init(name: String? = nil) {
-        self.propertyName = name;
-    }
-    
     public func hasUpdated() -> Bool {
-        return event.sequence > BGEvent.unknownPast.sequence
+        event.sequence > BGEvent.unknownPast.sequence
     }
     
-    var canUpdate: Bool {
+    func verifyDemands() {
+        // TODO: compile out checks with build flag
+        
+        guard BGGraph.checkUndeclaredDemands else {
+            return
+        }
+        
+        if let currentBehavior = graph?.currentRunningBehavior, currentBehavior !== supplier {
+            assert(currentBehavior.demands.first(where: { $0.resource === self }) != nil,
+                   "Accessed a resource in a behavior that was not declared as a demand.")
+        }
+    }
+    
+    var updateable: BGResourceUpdatable {
         guard let graph = self.graph else {
             // If graph is nil, then weak extent has been deallocated and resource updates are no-ops.
-            return false
+            return .notUpdatable
         }
         
         guard let currentEvent = graph.currentEvent else {
             assertionFailure("Can only update a resource during an event.")
-            return false
+            return .notUpdatable
         }
         
-        guard let extent = extent else {
+        guard let owner = owner else {
             assertionFailure("Cannot update a resource that does not belong to an extent.")
-            return false
+            return .notUpdatable
         }
         
         if let behavior = supplier {
             
             guard graph.currentRunningBehavior === behavior else {
                 assertionFailure("Can only supplied resource during its supplying behavior's run.")
-                return false
+                return .notUpdatable
             }
         } else {
-            if self !== extent._added {
+            if self !== owner._added {
                 guard graph.processingAction else {
                     assertionFailure("Can only update unsupplied resource during an action.")
-                    return false
+                    return .notUpdatable
                 }
             }
         }
         
-        guard eventDirectAccess.sequence < currentEvent.sequence else {
+        guard _event.sequence < currentEvent.sequence else {
             // assert or fail?
             assertionFailure()
-            return false
+            return .notUpdatable
         }
         
-        return true
+        return .updateable(graph: graph, currentEvent: currentEvent)
     }
     
-    static var assertUndeclaredDemands: Bool {
-        ProcessInfo.processInfo.arguments.contains("-BGGraphVerifyDemands")
+    var weakReference: WeakResource {
+        WeakResource(self)
     }
     
-    func verifyDemands() {
-        // TODO: compile out checks  with build flag
-        
-        guard BGResource.assertUndeclaredDemands else {
-            return
-        }
-        
-        if let currentBehavior = graph?.currentRunningBehavior, currentBehavior !== supplier {
-            assert(currentBehavior.demands.contains(self), "Accessed a resource in a behavior that was not declared as a demand.")
-        }
-    }
-}
-
-extension BGResource: CustomDebugStringConvertible {
     public var debugDescription: String {
-        return "<\(String(describing: Self.self)):\(String(format: "%018p", unsafeBitCast(self, to: Int64.self))) (\(propertyName ?? "Unlabeled"))>"
-    }
-}
-
-extension BGResource: Hashable {
-    public static func == (lhs: BGResource, rhs: BGResource) -> Bool {
-        return lhs === rhs
+        return "<\(String(describing: Self.self)):\(String(format: "%018p", unsafeBitCast(self, to: Int64.self))) (\(debugName ?? "Unlabeled"))>"
     }
     
     public func hash(into hasher: inout Hasher) {
@@ -140,39 +164,23 @@ extension BGResource: Hashable {
     }
 }
 
-public class BGTypedResource<Type>: BGResource {
-    private var _value: Type
-    public internal(set) var value: Type {
-        get {
-            // TODO: compile out this check with build flag
-            if BGResource.assertUndeclaredDemands {
-                verifyDemands()
-            }
-            return _value
-        }
-        
-        set { _value = newValue }
-    }
-    
-    var valueDirectAccess: Type { _value }
-    
-    init(_ value: Type, name: String? = nil) {
-        _value = value
-        super.init(name: name)
-    }
-}
-
-public class BGMoment: BGResource {
+public class BGMoment: BGResource, BGResourceInternal {
+    var subsequents = Set<BGSubsequentLink>()
+    weak var supplier: BGBehavior?
+    weak var owner: BGExtent?
+    var debugName: String?
+    var _event: BGEvent = .unknownPast
+    var _prevEvent: BGEvent = .unknownPast
     
     public func update() {
-        guard canUpdate else {
+        guard case .updateable(let graph, let currentEvent) = updateable else {
             return
         }
         
-        previousEvent = eventDirectAccess;
-        event = graph!.currentEvent!
+        _prevEvent = _event;
+        _event = currentEvent
         
-        graph!.updatedResources.append(self)
+        graph.updatedResources.append(self)
     }
     
     public func updateWithAction(file: String = #fileID, line: Int = #line, function: String = #function, syncStrategy: BGGraph.SynchronizationStrategy? = nil) {
@@ -189,33 +197,41 @@ public class BGMoment: BGResource {
 
 }
 
-public class BGTypedMoment<Type>: BGTypedResource<Type?>, TransientResource {
-    public typealias ReadableValueType = Type?
+public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResource {
+    var subsequents = Set<BGSubsequentLink>()
+    weak var supplier: BGBehavior?
+    weak var owner: BGExtent?
+    var debugName: String?
+    var _event: BGEvent = .unknownPast
+    var _prevEvent: BGEvent = .unknownPast
     
-    init(name: String? = nil) {
-        super.init(nil)
+    var _value: Type?
+    
+    public var updatedValue: Type? {
+        verifyDemands()
+        return _value
     }
-    
+
     public func update(_ newValue: Type) {
-        guard canUpdate, let graph = graph, let currentEvent = graph.currentEvent else {
+        guard case .updateable(let graph, let event) = updateable else {
             return
         }
-        
-        previousEvent = eventDirectAccess;
-        
-        value = newValue
-        event = currentEvent
-        
+
+        _prevEvent = _event;
+
+        _value = newValue
+        _event = event
+
         graph.updatedResources.append(self)
         graph.updatedTransientResources.append(self)
     }
-    
+
     public func updateWithAction(_ newValue: Type, file: String = #fileID, line: Int = #line, function: String = #function, syncStrategy: BGGraph.SynchronizationStrategy? = nil) {
         graph?.action(file: file, line: line, function: function, syncStrategy: syncStrategy) {
             self.update(newValue)
         }
     }
-    
+
     public func updateWithAction(_ newValue: Type, impulse: String, syncStrategy: BGGraph.SynchronizationStrategy? = nil) {
         graph?.action(impulse: impulse, syncStrategy: syncStrategy) {
             self.update(newValue)
@@ -223,60 +239,69 @@ public class BGTypedMoment<Type>: BGTypedResource<Type?>, TransientResource {
     }
 
     func clearTransientValue() {
-        value = nil
+        _value = nil
     }
-    
-    public var updatedValue: ReadableValueType { value }
 }
 
-public class BGState<Type>: BGTypedResource<Type>, TransientResource {
-    public typealias ReadableValueType = Type
+public enum BGStateComparison {
+    public enum None { case none }
+    public enum Equal { case equal }
+    public enum Identical { case identical }
+}
+
+public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
+    var subsequents = Set<BGSubsequentLink>()
+    weak var supplier: BGBehavior?
+    weak var owner: BGExtent?
+    var debugName: String?
+    var _event: BGEvent = .unknownPast
+    var _prevEvent: BGEvent = .unknownPast
     
+    var _value: Type
+    var _prevValue: Type?
     private var comparison: ((Type, Type) -> Bool)?
-    private var previousValue: Type?
+    
+    public var value: Type {
+        verifyDemands()
+        return _value
+    }
     
     public var traceValue: Type {
-        if let previousValue = previousValue {
-            return previousValue
+        if let value = _prevValue {
+            return value
         } else {
-            return valueDirectAccess
+            return _value
         }
     }
     
-    init(_ value: Type, name: String? = nil, comparison: ((Type, Type) -> Bool)?) {
+    init(_ value: Type, comparison: ((Type, Type) -> Bool)?) {
         self.comparison = comparison
-        self.previousValue = value
-        super.init(value, name: name)
-    }
-    
-    func commitUpdate(_ newValue: Type) {
-        guard let graph = self.graph, let currentEvent = graph.currentEvent else {
-            return
-        }
-        
-        previousValue = valueDirectAccess;
-        previousEvent = eventDirectAccess;
-        
-        value = newValue
-        event = currentEvent
-        
-        graph.updatedResources.append(self)
-        graph.updatedTransientResources.append(self)
+        self._value = value
+        self._prevValue = value
     }
     
     func valueEquals(_ other: Type) -> Bool {
         if let comparison = comparison {
-            return comparison(valueDirectAccess, other)
+            return comparison(_value, other)
         } else {
             return false
         }
     }
     
     public func update(_ newValue: Type) {
-        guard canUpdate else { return }
+        guard case .updateable(let graph, let event) = updateable else {
+            return
+        }
         
         if !valueEquals(newValue) {
-            commitUpdate(newValue)
+            _prevValue = _value;
+            _prevEvent = _event;
+            
+            _value = newValue
+            _event = event
+            
+            graph.updatedResources.append(self)
+            graph.updatedTransientResources.append(self)
         }
     }
     
@@ -307,10 +332,27 @@ public class BGState<Type>: BGTypedResource<Type>, TransientResource {
         guard justUpdated(), let comparison = comparison else {
             return false
         }
-        return comparison(valueDirectAccess, to) && comparison(traceValue, from)
+        return comparison(_value, to) && comparison(traceValue, from)
     }
     
     func clearTransientValue() {
-        previousValue = nil
+        _prevValue = nil
+    }
+}
+
+public protocol BGDemandable {
+}
+
+extension BGDemandable {
+    @inline (__always)
+    var link: BGDemandLink {
+        switch self {
+        case let link as BGDemandLink:
+            return link
+        case let resource as BGResourceInternal:
+            return BGDemandLink(resource: resource, type: .reactive)
+        default:
+            preconditionFailure("Unknown `BGDemandable` type.")
+        }
     }
 }

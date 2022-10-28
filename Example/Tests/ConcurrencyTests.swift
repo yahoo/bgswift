@@ -93,9 +93,6 @@ class ConcurrencyTests: XCTestCase {
                     
                     waitedForInnerAction = actionRan
                 }
-                
-                // Wait to give the other action's thread a chance to run
-                Thread.sleep(forTimeInterval: sleepInterval)
             }
         }
         
@@ -155,7 +152,7 @@ class ConcurrencyTests: XCTestCase {
         var execOrder = [String]()
         
         let b = BGExtentBuilder(graph: g)
-        b.behavior(supplies: [], demands: [b.added]) { extent in
+        b.behavior().demands([b.added]).runs { extent in
             g.action(impulse: "inner") {
                 execOrder.append(g.currentEvent!.impulse!)
             }
@@ -259,7 +256,7 @@ class ConcurrencyTests: XCTestCase {
         let g = BGGraph()
         let b = BGExtentBuilder(graph: g)
         let r1 = b.moment()
-        b.behavior(supplies: [], demands: [r1]) { extent in
+        b.behavior().demands([r1]).runs { extent in
             g.action(syncStrategy:.sync) {
                 // do something
             }
@@ -284,7 +281,7 @@ class ConcurrencyTests: XCTestCase {
         let g = BGGraph()
         let b = BGExtentBuilder(graph: g)
         let r1 = b.moment()
-        b.behavior(supplies: [], demands: [r1]) { extent in
+        b.behavior().demands([r1]).runs { extent in
             extent.sideEffect {
                 g.action(syncStrategy:.sync) {
                     // do something

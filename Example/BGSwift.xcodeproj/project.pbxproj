@@ -58,6 +58,7 @@
 		5A0BB7F327051DAB0043E632 /* ConcurrencyTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConcurrencyTests.swift; sourceTree = "<group>"; };
 		5A0BB7F427051DAB0043E632 /* BGStateTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BGStateTests.swift; sourceTree = "<group>"; };
 		5A0BB7FD27051F6C0043E632 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		5A4B176A290B642E002721CE /* BGLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGLink.swift; sourceTree = "<group>"; };
 		5AC349BA2705258600289AD2 /* BGBehavior.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BGBehavior.swift; sourceTree = "<group>"; };
 		5AC349C9270526C200289AD2 /* BGEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGEvent.swift; sourceTree = "<group>"; };
 		5AC349CB270526E000289AD2 /* BGExtent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGExtent.swift; sourceTree = "<group>"; };
@@ -66,8 +67,6 @@
 		5AC349D12705270500289AD2 /* BGSideEffect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGSideEffect.swift; sourceTree = "<group>"; };
 		5AC349D32705271000289AD2 /* Mutex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mutex.swift; sourceTree = "<group>"; };
 		5AC349D52705271A00289AD2 /* PriorityQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PriorityQueue.swift; sourceTree = "<group>"; };
-		5AC349D72705272200289AD2 /* WeakSet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeakSet.swift; sourceTree = "<group>"; };
-		5AC349D92705272A00289AD2 /* WeakWrapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeakWrapper.swift; sourceTree = "<group>"; };
 		5AC34A3F270533EF00289AD2 /* BGAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGAction.swift; sourceTree = "<group>"; };
 		733FCDF427067E28009CF264 /* BGMomentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGMomentTests.swift; sourceTree = "<group>"; };
 		739FF919270F98F4000DACD1 /* BGExtentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGExtentTests.swift; sourceTree = "<group>"; };
@@ -170,11 +169,10 @@
 				5AC349CB270526E000289AD2 /* BGExtent.swift */,
 				5AC349CD270526ED00289AD2 /* BGGraph.swift */,
 				5AC349CF270526F600289AD2 /* BGResource.swift */,
+				5A4B176A290B642E002721CE /* BGLink.swift */,
 				5AC349D12705270500289AD2 /* BGSideEffect.swift */,
 				5AC349D32705271000289AD2 /* Mutex.swift */,
 				5AC349D52705271A00289AD2 /* PriorityQueue.swift */,
-				5AC349D72705272200289AD2 /* WeakSet.swift */,
-				5AC349D92705272A00289AD2 /* WeakWrapper.swift */,
 			);
 			path = Classes;
 			sourceTree = "<group>";
@@ -561,6 +559,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = DBFB91C16E7BCE9F06B08EE1 /* Pods-BGSwift-Example.debug.xcconfig */;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -592,6 +591,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 201C0CF2C814828DFCD7F7A3 /* Pods-BGSwift-Example.release.xcconfig */;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
@@ -623,7 +623,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 08CD0F42D31C66D6249278B2 /* Pods-BGSwift-Tests.debug.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
@@ -653,7 +653,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 544081C857CAAA5A85BA8AD0 /* Pods-BGSwift-Tests.release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
