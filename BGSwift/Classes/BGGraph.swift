@@ -293,6 +293,8 @@ public class BGGraph {
                                 needsOrdering.append(subsequent)
                             }
                         }
+                        
+                        // Take this opportunity to remove "dead" links with zero's weak references
                         deadLinks.forEach {
                             resource.subsequents.remove($0)
                         }
@@ -426,6 +428,7 @@ public class BGGraph {
                 }
             }
             
+            // Take this opportunity to remove "dead" links with zero's weak references
             deadLinks.forEach { behavior.demands.remove($0) }
             
             behavior.orderingState = .ordered
@@ -454,29 +457,14 @@ public class BGGraph {
             assertionFailure("Extents must be added during an event.")
             return
         }
-        guard extent._added._event == BGEvent.unknownPast else {
+        guard extent.status == .inactive else {
             assertionFailure("Extent can only be added once.")
             return
         }
         
         extent._added.update()
+        extent.status = .added
         untrackedBehaviors.append(contentsOf: extent.behaviors)
-    }
-    
-    func updateDemands(behavior: BGBehavior) {
-        guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only update demands during an event.")
-            return
-        }
-        behaviorsWithModifiedDemands.append(behavior)
-    }
-    
-    func updateSupplies(behavior: BGBehavior) {
-        guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only update supplies during an event.")
-            return
-        }
-        behaviorsWithModifiedSupplies.append(behavior)
     }
     
     func removeExtent(resources: [BGResourceInternal], behaviors: [BGBehavior]) {
@@ -493,7 +481,10 @@ public class BGGraph {
             
             if let supplier = resource.supplier {
                 supplier.supplies.remove(resource.weakReference)
+                resource.supplier = nil
             }
+            
+            resource.owner = nil
         }
         
         behaviors.forEach { behavior in
@@ -508,7 +499,25 @@ public class BGGraph {
             behavior.demands.removeAll()
             
             behavior.removedSequence = eventLoopState.event.sequence
+            
+            behavior.owner = nil
         }
+    }
+    
+    func updateDemands(behavior: BGBehavior) {
+        guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
+            assertionFailure("Can only update demands during an event.")
+            return
+        }
+        behaviorsWithModifiedDemands.append(behavior)
+    }
+    
+    func updateSupplies(behavior: BGBehavior) {
+        guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
+            assertionFailure("Can only update supplies during an event.")
+            return
+        }
+        behaviorsWithModifiedSupplies.append(behavior)
     }
     
     func executeSideEffect(_ work: () -> Void) {

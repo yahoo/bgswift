@@ -63,6 +63,15 @@ public class BGBehavior {
         runBlock(owner)
     }
     
+    public func setDynamicSupplies(_ supplies: [BGResource]) {
+        uncommittedDynamicSupplies = (supplies as! [BGResourceInternal])
+        uncommittedSupplies = true
+        graph?.updateSupplies(behavior: self)
+    }
+    
+    public func setDynamicSupplies(_ supplies: BGResource...) {
+        setDynamicSupplies(supplies as [BGResource])
+    }
     
     public func setDynamicDemands(_ demands: [BGDemandable]) {
         uncommittedDynamicDemands = demands
@@ -70,10 +79,8 @@ public class BGBehavior {
         graph?.updateDemands(behavior: self)
     }
     
-    public func setDynamicSupplies(_ supplies: [BGResource]) {
-        uncommittedDynamicSupplies = (supplies as! [BGResourceInternal])
-        uncommittedSupplies = true
-        graph?.updateSupplies(behavior: self)
+    public func setDynamicDemands(_ demands: BGDemandable...) {
+        setDynamicDemands(demands as [BGDemandable])
     }
 }
 

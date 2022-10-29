@@ -279,9 +279,19 @@ public class BGBehaviorBuilder<Extent: BGExtent> {
     }
     
     @discardableResult
+    public func supplies(_ supplies: BGResource...) -> BGBehaviorBuilder {
+        self.supplies(supplies as [BGResource])
+    }
+    
+    @discardableResult
     public func demands(_ demands: [BGDemandable]) -> BGBehaviorBuilder {
         _demands = demands
         return self
+    }
+    
+    @discardableResult
+    public func demands(_ demands: BGDemandable...) -> BGBehaviorBuilder {
+        self.demands(demands as [BGDemandable])
     }
     
     @discardableResult
