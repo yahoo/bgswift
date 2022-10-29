@@ -30,7 +30,7 @@ class EventTests: XCTestCase {
         // |> Given a behavior in the graph
         var counter = 0;
         var sideEffectCount: Int? = nil;
-        b.behavior(supplies: [], demands: [rA]) { extent in
+        b.behavior().demands([rA]).runs { extent in
             counter = counter + 1
         }
         e = BGExtent(builder: b)
@@ -51,13 +51,13 @@ class EventTests: XCTestCase {
     func testSideEffectsHappenInOrderTheyAreCreated() {
         // |> Given behaviors with side effects
         var runs: [Int] = []
-        b.behavior(supplies: [rB], demands: [rA]) { extent in
+        b.behavior().supplies([rB]).demands([rA]).runs { extent in
             self.rB.update(1)
             extent.sideEffect {
                 runs.append(2)
             }
         }
-        b.behavior(supplies: [], demands: [rB]) { extent in
+        b.behavior().demands([rB]).runs { extent in
             extent.sideEffect {
                 runs.append(1)
             }
@@ -78,10 +78,10 @@ class EventTests: XCTestCase {
         var valueAvailable = false
         var updatedAvailable = false
         let rX: BGTypedMoment<Int> = b.typedMoment()
-        b.behavior(supplies: [rX], demands: [rA]) { extent in
+        b.behavior().supplies([rX]).demands([rA]).runs { extent in
             rX.update(2)
             extent.sideEffect {
-                valueAvailable = rX.value == 2
+                valueAvailable = rX.updatedValue == 2
                 updatedAvailable = rX.justUpdated()
             }
         }
@@ -97,7 +97,7 @@ class EventTests: XCTestCase {
         XCTAssertTrue(valueAvailable)
         XCTAssertTrue(updatedAvailable)
         // and the value/updated state will not be available outside that event
-        XCTAssertNil(rX.value)
+        XCTAssertNil(rX.updatedValue)
         XCTAssertFalse(rX.justUpdated())
     }
     
@@ -106,7 +106,7 @@ class EventTests: XCTestCase {
         var counter = 0
         var effectCount: Int?
         var actionCount: Int?
-        b.behavior(supplies: [], demands: [rA]) { extent in
+        b.behavior().demands([rA]).runs { extent in
             self.e.sideEffect {
                 self.g.action {
                     actionCount = counter

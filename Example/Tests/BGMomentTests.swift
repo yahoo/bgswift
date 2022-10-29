@@ -23,7 +23,7 @@ class BGMomentTests: XCTestCase {
         // |> Given a moment in the graph
         let mr1 = bld.moment()
         var afterUpdate = false;
-        bld.behavior(demands:[mr1]) { extent in
+        bld.behavior().demands([mr1]).runs { extent in
             if mr1.justUpdated() {
                 afterUpdate = true
             }
@@ -59,9 +59,9 @@ class BGMomentTests: XCTestCase {
         // Given a moment with data
         let mr1: BGTypedMoment<Int> = bld.typedMoment()
         var afterUpdate: Int? = nil
-        bld.behavior(supplies: [], demands: [mr1]) { extent in
+        bld.behavior().demands([mr1]).runs { extent in
             if mr1.justUpdated() {
-                afterUpdate = mr1.value
+                afterUpdate = mr1.updatedValue
             }
         }
         ext = BGExtent(builder: bld)
@@ -93,7 +93,7 @@ class BGMomentTests: XCTestCase {
         }
 
         // |> Then value nils out and is not retained
-        XCTAssertNil(mr1.value)
+        XCTAssertNil(mr1.updatedValue)
         XCTAssertNil(weakValue)
     }
     
@@ -101,7 +101,7 @@ class BGMomentTests: XCTestCase {
         // |> Given a moment
         let mr1 = bld.moment()
         var didRun = false;
-        bld.behavior(supplies: [], demands: [mr1]) { extent in
+        bld.behavior().demands([mr1]).runs { extent in
             if mr1.justUpdated() {
                 didRun = true
             }
@@ -156,9 +156,9 @@ class BGMomentTests: XCTestCase {
         // |> Given a supplied moment
         let mr1 = bld.moment()
         let mr2 = bld.moment()
-        bld.behavior(supplies: [mr2], demands: [mr1]) { extent in
+        bld.behavior().supplies([mr2]).demands([mr1]).runs { extent in
         }
-        bld.behavior(supplies:[], demands: [mr1]) { extent in
+        bld.behavior().demands([mr1]).runs { extent in
             if mr1.justUpdated() {
                 mr2.update()
             }
@@ -180,7 +180,7 @@ class BGMomentTests: XCTestCase {
         let mr1 = bld.moment()
         let mr2 = bld.moment()
         var updateFailed = false
-        bld.behavior(supplies: [], demands: [mr1]) { extent in
+        bld.behavior().demands([mr1]).runs { extent in
             updateFailed = CheckAssertionHit {
                 mr2.update()
             }
@@ -200,7 +200,7 @@ class BGMomentTests: XCTestCase {
     func testCheckSuppliedMomentCannotBeUpdatedInAction() {
         // |> Given a supplied moment
         let mr1 = bld.moment()
-        bld.behavior(supplies: [mr1], demands: []) { extent in
+        bld.behavior().supplies([mr1]).demands([]).runs { extent in
         }
         ext = BGExtent(builder: bld)
         ext.addToGraphWithAction()

@@ -5,14 +5,21 @@
 
 import Foundation
 
-open class BGExtent {
-    public weak var graph: BGGraph?
+open class BGExtent: NSObject {
+    public let graph: BGGraph
     
-    let resources: [BGResource]
-    let behaviors: [BGBehavior]
+    var resources: [BGResourceInternal]
+    var behaviors: [BGBehavior]
     
     var _added: BGMoment
     public var added: BGResource { _added }
+    
+    enum Status {
+        case inactive
+        case added
+        case removed
+    }
+    var status: Status = .inactive
     
     public init(builder: BGExtentBuilderGeneric) {
         graph = builder.graph
@@ -23,51 +30,73 @@ open class BGExtent {
         builder.resources.removeAll()
         builder.behaviors.removeAll()
         
+        super.init()
+        
         self.resources.forEach {
-            $0.extent = self
+            $0.owner = self
         }
         
         self.behaviors.forEach {
-            $0.extent = self
+            $0.owner = self
         }
         
         let mirror = Mirror(reflecting: self)
         mirror.children.forEach { child in
-            if let resource = child.value as? BGResource {
-                if resource.propertyName == nil {
-                    resource.propertyName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Resource")"
+            if let resource = child.value as? BGResourceInternal {
+                if resource.debugName == nil {
+                    resource.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Resource")"
                 }
             } else if let behavior = child.value as? BGBehavior {
-                if behavior.propertyName == nil {
-                    behavior.propertyName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Behavior")"
+                if behavior.debugName == nil {
+                    behavior.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Behavior")"
                 }
             }
         }
     }
     
     deinit {
-        guard let graph = self.graph else {
+        guard status == .added else {
             return
         }
-        let behaviors = self.behaviors
-        
-        graph.action(syncStrategy: .none) { [weak graph] in
-            guard let graph = graph else {
-                return
-            }
-            
-            behaviors.forEach(graph.removeBehavior)
+        status = .removed
+
+        let resources = resources
+        let behaviors = behaviors
+        let graph = graph
+        graph.action { [weak graph] in
+            graph?.removeExtent(resources: resources, behaviors: behaviors)
         }
     }
     
     public func addToGraph() {
-        graph?.addExtent(self)
+        graph.addExtent(self)
     }
     
     public func addToGraphWithAction() {
-        graph?.action {
+        graph.action {
             self.addToGraph()
         }
+    }
+    
+    public func removeFromGraph() {
+        guard status == .added else {
+            assertionFailure("Extents can only be removed once after adding.")
+            return
+        }
+        
+        guard graph.processingChanges else {
+            assertionFailure("Can only remove behaviors during an event.")
+            return
+        }
+        
+        status = .removed
+        
+        let resources = resources
+        let behaviors = behaviors
+        self.resources.removeAll()
+        self.behaviors.removeAll()
+        
+        graph.removeExtent(resources: resources, behaviors: behaviors)
     }
     
     public func sideEffect(file: String = #fileID, line: Int = #line, function: String = #function, _ body: @escaping () -> Void) {
@@ -76,16 +105,12 @@ open class BGExtent {
     }
     
     public func sideEffect(_ label: String?, _ body: @escaping () -> Void) {
-        guard let graph = graph else {
-            // assert
-            return
-        }
         graph.sideEffect(label, body: body)
     }
 }
 
 public class BGExtentBuilderGeneric {
-    var resources = [BGResource]()
+    var resources = [BGResourceInternal]()
     var behaviors = [BGBehavior]()
     let graph: BGGraph
     let _added = BGMoment()
@@ -115,26 +140,26 @@ public class BGExtentBuilderGeneric {
     }
     
     @_disfavoredOverload
-    public func state<T>(_ value: T, comparison: BGResource.ComparisonNone = .none) -> BGState<T> {
+    public func state<T>(_ value: T, comparison: BGStateComparison.None = .none) -> BGState<T> {
         return state(value) { _, _ in
             false
         }
     }
     
-    public func state<T: Equatable>(_ value: T, comparison: BGResource.ComparisonEqual = .equal) -> BGState<T> {
+    public func state<T: Equatable>(_ value: T, comparison: BGStateComparison.Equal = .equal) -> BGState<T> {
         return state(value) { lhs, rhs in
             lhs == rhs
         }
     }
     
-    public func state<T: AnyObject>(_ value: T, comparison: BGResource.ComparisonIdentical = .identical) -> BGState<T> {
+    public func state<T: AnyObject>(_ value: T, comparison: BGStateComparison.Identical = .identical) -> BGState<T> {
         return state(value) { lhs, rhs in
             lhs === rhs
         }
     }
     
     @_disfavoredOverload
-    public func state<T: BGOptionalObject>(_ value: T, comparison: BGResource.ComparisonIdentical = .identical) -> BGState<T> {
+    public func state<T: BGOptionalObject>(_ value: T, comparison: BGStateComparison.Identical = .identical) -> BGState<T> {
         return state(value) { lhs, rhs in
             lhs.bg_unwrapped === rhs.bg_unwrapped
         }
@@ -143,128 +168,195 @@ public class BGExtentBuilderGeneric {
 
 public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
     
-    @discardableResult public func behavior(supplies staticSupplies: [BGResource] = [],
-                                            demands staticDemands: [BGResource] = [],
-                                            body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
-        return behavior(supplies: staticSupplies, demands: staticDemands, dynamicSupplies: nil, dynamicDemands: nil, body: body)
-    }
+    @discardableResult
+    public func behavior() -> BGBehaviorBuilder<Extent> { BGBehaviorBuilder(self) }
     
-    @discardableResult public func behavior(supplies staticSupplies: [BGResource] = [],
-                                            demands staticDemands: [BGResource] = [],
-                                            dynamicSupplies: DynamicResourceLink<Extent>? = nil,
-                                            dynamicDemands: DynamicResourceLink<Extent>? = nil,
-                                            body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
-        let genericBody: (BGExtent) -> Void = { extent in
+    fileprivate func behavior(supplies staticSupplies: [BGResource],
+                              demands staticDemands: [BGDemandable],
+                              dynamicSupplies: BGDynamicSupplyBuilder<Extent>?,
+                              dynamicDemands: BGDynamicDemandBuilder<Extent>?,
+                              body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
+        var staticSupplies = staticSupplies
+        var staticDemands = staticDemands
+        
+        var postOrdering: BGMoment?
+        if dynamicSupplies?.order == .post || dynamicDemands?.order == .post {
+            let resource = moment()
+            resource.debugName = "DynamicPostOrdering"
+            staticSupplies.append(resource)
+            postOrdering = resource
+        }
+        
+        var preSuppliesOrdering: BGMoment?
+        if dynamicSupplies?.order == .pre {
+            let resource = moment()
+            resource.debugName = "DynamicSuppliesPreOrdering"
+            staticDemands.append(resource)
+            preSuppliesOrdering = resource
+        }
+        
+        var preDemandsOrdering: BGMoment?
+        if dynamicDemands?.order == .pre {
+            let resource = moment()
+            resource.debugName = "DynamicDemandsPreOrdering"
+            staticDemands.append(resource)
+            preDemandsOrdering = resource
+        }
+        
+        let mainBehavior = BGBehavior(supplies: staticSupplies, demands: staticDemands) { extent in
             body(extent as! Extent)
         }
+        behaviors.append(mainBehavior)
         
-        var extendedDemands = staticDemands
-        var extendedSupplies = staticSupplies
-        let dynamicSuppliesOrderingResource: BGResource?
-        let dynamicDemandsOrderingResource: BGResource?
-        
-        if let dynamicSupplies = dynamicSupplies, !dynamicSupplies.switches.isEmpty {
-            let orderingResource = moment()
-            orderingResource.propertyName = "DynamicSuppliesOrdering"
+        if let dynamics = dynamicSupplies {
+            var demands = dynamics.demands
+            var supplies = [BGResource]()
             
-            dynamicSuppliesOrderingResource = orderingResource
-            
-            switch dynamicSupplies.order {
+            switch dynamics.order {
             case .pre:
-                extendedDemands.append(orderingResource)
+                supplies.append(preSuppliesOrdering!)
             case .post:
-                extendedSupplies.append(orderingResource)
-            }
-        } else {
-            dynamicSuppliesOrderingResource = nil
-        }
-        
-        if let dynamicDemands = dynamicDemands, !dynamicDemands.switches.isEmpty {
-            let orderingResource = moment()
-            orderingResource.propertyName = "DynamicDemandsOrdering"
-            
-            dynamicDemandsOrderingResource = orderingResource
-            
-            switch dynamicDemands.order {
-            case .pre:
-                extendedDemands.append(orderingResource)
-            case .post:
-                extendedSupplies.append(orderingResource)
-            }
-        } else {
-            dynamicDemandsOrderingResource = nil
-        }
-        
-        let behavior = BGBehavior(supplies: extendedSupplies,
-                                  demands: extendedDemands,
-                                  body: genericBody)
-        behaviors.append(behavior)
-        
-        if let dynamicSupplies = dynamicSupplies, let orderingResource = dynamicSuppliesOrderingResource {
-            let resolver = dynamicSupplies.resolver
-            
-            var implicitBehaviorSupplies = [BGResource]()
-            var implicitBehaviorDemands = dynamicSupplies.switches
-            switch dynamicSupplies.order {
-            case .pre:
-                implicitBehaviorSupplies.append(orderingResource)
-            case .post:
-                implicitBehaviorDemands.append(orderingResource)
+                demands.append(postOrdering!)
             }
             
-            let implicitBehavior = BGBehavior(supplies: implicitBehaviorSupplies, demands: implicitBehaviorDemands) { [weak behavior] extent in
-                guard let behavior = behavior else {
-                    return
+            let resolver = dynamics.resolver
+            behavior()
+                .supplies(supplies)
+                .demands(demands)
+                .dynamicDemands(dynamics._dynamicDemands)
+                .runs { [weak mainBehavior] extent in
+                    guard let mainBehavior = mainBehavior else {
+                        return
+                    }
+                    mainBehavior.setDynamicSupplies(resolver(extent).compactMap { $0 })
                 }
-                var supplies = staticSupplies
-                supplies.append(contentsOf: resolver(extent as! Extent).compactMap { $0 })
-                behavior.setSupplies(supplies)
-            }
-            behaviors.append(implicitBehavior)
         }
         
-        if let dynamicDemands = dynamicDemands, let orderingResource = dynamicDemandsOrderingResource {
-            let resolver = dynamicDemands.resolver
+        if let dynamics = dynamicDemands {
+            var demands = dynamics.demands
+            var supplies = [BGResource]()
             
-            var implicitBehaviorSupplies = [BGResource]()
-            var implicitBehaviorDemands = dynamicDemands.switches
-            switch dynamicDemands.order {
+            switch dynamics.order {
             case .pre:
-                implicitBehaviorSupplies.append(orderingResource)
+                supplies.append(preDemandsOrdering!)
             case .post:
-                implicitBehaviorDemands.append(orderingResource)
+                demands.append(postOrdering!)
             }
             
-            let implicitBehavior = BGBehavior(supplies: implicitBehaviorSupplies, demands: implicitBehaviorDemands) { [weak behavior] extent in
-                guard let behavior = behavior else {
-                    return
+            let resolver = dynamics.resolver
+            behavior()
+                .supplies(supplies)
+                .demands(demands)
+                .dynamicDemands(dynamics._dynamicDemands)
+                .runs { [weak mainBehavior] extent in
+                    guard let mainBehavior = mainBehavior else {
+                        return
+                    }
+                    mainBehavior.setDynamicDemands(resolver(extent).compactMap { $0 })
                 }
-                var demands = extendedDemands
-                demands.append(contentsOf: resolver(extent as! Extent).compactMap { $0 })
-                behavior.setDemands(demands)
-            }
-            behaviors.append(implicitBehavior)
         }
         
-        return behavior
+        return mainBehavior
     }
 }
 
-public class DynamicResourceLink<Extent: BGExtent> {
-    var switches: [BGResource]
-    var order: OrderingType
-    var resolver: (Extent) -> ([BGResource?])
+public class BGBehaviorBuilder<Extent: BGExtent> {
+    let builder: BGExtentBuilder<Extent>
     
-    public enum OrderingType {
-        case pre
-        case post
+    var _supplies = [BGResource]()
+    var _demands = [BGDemandable]()
+    var _dynamicSupplies: BGDynamicSupplyBuilder<Extent>?
+    var _dynamicDemands: BGDynamicDemandBuilder<Extent>?
+    
+    init(_ builder: BGExtentBuilder<Extent>) {
+        self.builder = builder
     }
     
-    public init(switches: [BGResource], order: OrderingType, _ resolver: @escaping (Extent) -> ([BGResource?])) {
-        self.switches = switches
+    @discardableResult
+    public func supplies(_ supplies: [BGResource]) -> BGBehaviorBuilder {
+        _supplies = supplies
+        return self
+    }
+    
+    @discardableResult
+    public func supplies(_ supplies: BGResource...) -> BGBehaviorBuilder {
+        self.supplies(supplies as [BGResource])
+    }
+    
+    @discardableResult
+    public func demands(_ demands: [BGDemandable]) -> BGBehaviorBuilder {
+        _demands = demands
+        return self
+    }
+    
+    @discardableResult
+    public func demands(_ demands: BGDemandable...) -> BGBehaviorBuilder {
+        self.demands(demands as [BGDemandable])
+    }
+    
+    @discardableResult
+    public func dynamicSupplies(_ dynamicSupplies: BGDynamicSupplyBuilder<Extent>?) -> BGBehaviorBuilder {
+        _dynamicSupplies = dynamicSupplies
+        return self
+    }
+    
+    @discardableResult
+    public func dynamicDemands(_ dynamicDemands: BGDynamicDemandBuilder<Extent>?) -> BGBehaviorBuilder {
+        _dynamicDemands = dynamicDemands
+        return self
+    }
+    
+    @discardableResult
+    public func runs(_ body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
+        builder.behavior(supplies: _supplies,
+                         demands: _demands,
+                         dynamicSupplies: _dynamicSupplies,
+                         dynamicDemands: _dynamicDemands,
+                         body: body)
+    }
+}
+
+public enum BGDynamicsOrderingType {
+    case pre
+    case post
+}
+
+public class BGDynamicSupplyBuilder<Extent: BGExtent> {
+    let order: BGDynamicsOrderingType
+    let demands: [BGDemandable]
+    var _dynamicDemands: BGDynamicDemandBuilder<Extent>?
+    let resolver: (_ extent: Extent) -> [BGResource?]
+    
+    init(_ order: BGDynamicsOrderingType,
+         demands: [BGDemandable],
+         _ resolver: @escaping (_ extent: Extent) -> [BGResource?]) {
         self.order = order
+        self.demands = demands
         self.resolver = resolver
     }
+    
+    public func withDynamicDemands(_ dynamicDemands: BGDynamicDemandBuilder<Extent>?) -> BGDynamicSupplyBuilder<Extent> {
+        _dynamicDemands = dynamicDemands
+        return self
+    }
 }
 
-
+public class BGDynamicDemandBuilder<Extent: BGExtent> {
+    let order: BGDynamicsOrderingType
+    let demands: [BGDemandable]
+    var _dynamicDemands: BGDynamicDemandBuilder<Extent>?
+    let resolver: (_ extent: Extent) -> [BGDemandable?]
+    
+    public init(_ order: BGDynamicsOrderingType,
+                demands: [BGDemandable],
+                _ resolver: @escaping (_ extent: Extent) -> [BGDemandable?]) {
+        self.order = order
+        self.demands = demands
+        self.resolver = resolver
+    }
+    
+    public func withDynamicDemands(_ dynamicDemands: BGDynamicDemandBuilder<Extent>?) -> BGDynamicDemandBuilder<Extent> {
+        _dynamicDemands = dynamicDemands
+        return self
+    }
+}

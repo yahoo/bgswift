@@ -28,10 +28,10 @@ class BGGraphTests: XCTestCase {
 
     func testDependencyCyclesCaught() {
         // |> Given a graph with dependency cycles
-        b.behavior(supplies: [rA], demands: [rB]) { extent in
+        b.behavior().supplies([rA]).demands([rB]).runs { extent in
             // nothing
         }
-        b.behavior(supplies: [rB], demands: [rA]) { extent in
+        b.behavior().supplies([rB]).demands([rA]).runs { extent in
             // nothing
         }
         e = BGExtent(builder: b)
@@ -44,40 +44,38 @@ class BGGraphTests: XCTestCase {
     }
     
     func testResourceCanOnlyBeSuppliedByOneBehavior() {
-        // |> Given an extent with multiple behaviors that supply the same resource
-        b.behavior(supplies: [rA], demands: [], body:{ extent in
-            // nothing
-        })
-        b.behavior(supplies: [rA], demands: []) { extent in
+        // |> Given an a resource that is supplied by a behavior
+        b.behavior().supplies([rA]).runs { extent in
             // nothing
         }
-        e = BGExtent(builder: b)
         
-        // |> When it is added
+        // |> When a behavior sets a static supply that is already supplied by another behavior
         // |> Then it will raise an error
         TestAssertionHit {
-            e.addToGraphWithAction()
+            b.behavior().supplies([rA]).runs { extent in
+                // nothing
+            }
         }
-    }
-
-    func testCannotAddDemandNotPartOfGraph() {
-        // |> Given a extent with a behavior that demands a resource not added to the graph
-        let b2 = BGExtentBuilder(graph: g)
-        b2.behavior(supplies: [], demands: [rA]) { extent in
+        
+        let bhv = b.behavior().runs { extent in
             // nothing
         }
-        let e2 = BGExtent(builder: b2)
         
-        // |> When it is added to the graph
-        // |> Then there should be an error
+        e = BGExtent(builder: b)
+        e.addToGraphWithAction()
+        
+        // |> When a behavior sets a dynamic supply that is already supplied by another behavior
+        // |> Then it will raise an error
         TestAssertionHit {
-            e2.addToGraphWithAction()
+            g.action {
+                bhv.setDynamicSupplies([self.rA])
+            }
         }
     }
 
     func testLinksCanOnlyBeUpdatedDuringAnEvent() {
         // |> Given a behavior in a graph
-        let bhv = b.behavior(supplies: [], demands: []) { extent in
+        let bhv = b.behavior().runs { extent in
             // nothing
         }
         e = BGExtent(builder: b)
@@ -86,13 +84,13 @@ class BGGraphTests: XCTestCase {
         // |> When updating demands outside of event
         // |> Then there is an error
         TestAssertionHit {
-            bhv.setDemands([rA])
+            bhv.setDynamicDemands([rA])
         }
         
         // |> And when updating supplies outside of event
         // |> Then there is an error
         TestAssertionHit {
-            bhv.setSupplies([rB])
+            bhv.setDynamicSupplies([rB])
         }
     }
     
