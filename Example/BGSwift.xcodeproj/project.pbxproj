@@ -72,6 +72,7 @@
 		739FF919270F98F4000DACD1 /* BGExtentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGExtentTests.swift; sourceTree = "<group>"; };
 		739FF91B270F9D00000DACD1 /* BGGraphTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BGGraphTests.swift; sourceTree = "<group>"; };
 		739FF91E270FAF6A000DACD1 /* EventTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventTests.swift; sourceTree = "<group>"; };
+		73E0B6492960F75100912A22 /* Package.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Package.swift; path = ../Package.swift; sourceTree = "<group>"; };
 		8A12E8DD9E2CF2B6B45E7835 /* Pods_BGSwift_Example.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_BGSwift_Example.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A2F667ABE5A14147F7D89E8 /* Pods_BGSwift_Tests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_BGSwift_Tests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		DBFB91C16E7BCE9F06B08EE1 /* Pods-BGSwift-Example.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-BGSwift-Example.debug.xcconfig"; path = "Target Support Files/Pods-BGSwift-Example/Pods-BGSwift-Example.debug.xcconfig"; sourceTree = "<group>"; };
@@ -100,6 +101,7 @@
 		5A0BB796270517E40043E632 = {
 			isa = PBXGroup;
 			children = (
+				73E0B6492960F75100912A22 /* Package.swift */,
 				5AC349BC2705259F00289AD2 /* BGSwift */,
 				5A0BB7A1270517E40043E632 /* Example */,
 				5A0BB7B8270517E60043E632 /* Tests */,
