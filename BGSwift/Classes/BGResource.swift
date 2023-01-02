@@ -164,7 +164,7 @@ extension BGResourceInternal {
     }
 }
 
-public class BGMoment: BGResource, BGResourceInternal {
+public class BGMoment: BGResource, BGResourceInternal, ObservableObject {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
@@ -176,6 +176,8 @@ public class BGMoment: BGResource, BGResourceInternal {
         guard case .updateable(let graph, let currentEvent) = updateable else {
             return
         }
+        
+        objectWillChange.send()
         
         _prevEvent = _event;
         _event = currentEvent
@@ -197,7 +199,7 @@ public class BGMoment: BGResource, BGResourceInternal {
 
 }
 
-public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResource {
+public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResource, ObservableObject {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
@@ -217,6 +219,8 @@ public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResou
             return
         }
 
+        objectWillChange.send()
+        
         _prevEvent = _event;
 
         _value = newValue
@@ -249,7 +253,7 @@ public enum BGStateComparison {
     public enum Identical { case identical }
 }
 
-public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
+public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, ObservableObject {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
@@ -294,6 +298,7 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
         }
         
         if !valueEquals(newValue) {
+            objectWillChange.send()
             _prevValue = _value;
             _prevEvent = _event;
             
@@ -353,6 +358,19 @@ extension BGDemandable {
             return BGDemandLink(resource: resource, type: .reactive)
         default:
             preconditionFailure("Unknown `BGDemandable` type.")
+        }
+    }
+}
+
+public class BGBindingState<Type>: BGState<Type> {
+    public var inputState: BGState<Type>!
+    
+    public var bindingValue: Type {
+        get {
+            return value
+        }
+        set {
+            inputState.updateWithAction(newValue)
         }
     }
 }
