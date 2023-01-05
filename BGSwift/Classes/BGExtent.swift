@@ -163,16 +163,7 @@ public class BGExtentBuilderGeneric {
         return state(value) { lhs, rhs in
             lhs.bg_unwrapped === rhs.bg_unwrapped
         }
-    }
-    
-    public func bindingState<T>(_ value: T, comparison: @escaping (T, T) -> Bool) -> BGBindingState<T> {
-        let state = BGBindingState(value, comparison: comparison)
-        let inputState = BGState(value, comparison: comparison)
-        state.inputState = inputState
-        resources.append(state)
-        resources.append(inputState)
-        return state
-    }
+    }    
 }
 
 public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {

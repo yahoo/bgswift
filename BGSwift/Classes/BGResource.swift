@@ -164,7 +164,7 @@ extension BGResourceInternal {
     }
 }
 
-public class BGMoment: BGResource, BGResourceInternal, ObservableObject {
+public class BGMoment: BGResource, BGResourceInternal {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
@@ -176,8 +176,6 @@ public class BGMoment: BGResource, BGResourceInternal, ObservableObject {
         guard case .updateable(let graph, let currentEvent) = updateable else {
             return
         }
-        
-        objectWillChange.send()
         
         _prevEvent = _event;
         _event = currentEvent
@@ -199,7 +197,7 @@ public class BGMoment: BGResource, BGResourceInternal, ObservableObject {
 
 }
 
-public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResource, ObservableObject {
+public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResource {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
@@ -219,8 +217,6 @@ public class BGTypedMoment<Type>: BGResource, BGResourceInternal, TransientResou
             return
         }
 
-        objectWillChange.send()
-        
         _prevEvent = _event;
 
         _value = newValue
@@ -261,6 +257,22 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, O
     var _event: BGEvent = .unknownPast
     var _prevEvent: BGEvent = .unknownPast
     
+    // These properties support combine and swiftui
+    public weak var bindingInput: BGState? // could even be ourselves for two way binding
+    private var _observableUpdated: BGEvent = .unknownPast
+    public var observableValue: Type {
+        get {
+            if _event.sequence > _observableUpdated.sequence {
+                return traceValue
+            } else {
+                return value
+            }
+        }
+        set {
+            bindingInput?.updateWithAction(newValue)
+        }
+    }
+    
     var _value: Type
     var _prevValue: Type?
     private var comparison: ((Type, Type) -> Bool)?
@@ -298,7 +310,12 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, O
         }
         
         if !valueEquals(newValue) {
-            objectWillChange.send()
+            owner?.sideEffect { [weak self] in
+                if let self {
+                    self.objectWillChange.send()
+                    self._observableUpdated = self.event
+                }
+            }
             _prevValue = _value;
             _prevEvent = _event;
             
@@ -343,6 +360,7 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, O
     func clearTransientValue() {
         _prevValue = nil
     }
+
 }
 
 public protocol BGDemandable {
@@ -362,15 +380,3 @@ extension BGDemandable {
     }
 }
 
-public class BGBindingState<Type>: BGState<Type> {
-    public var inputState: BGState<Type>!
-    
-    public var bindingValue: Type {
-        get {
-            return value
-        }
-        set {
-            inputState.updateWithAction(newValue)
-        }
-    }
-}
