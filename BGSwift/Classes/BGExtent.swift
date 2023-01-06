@@ -163,7 +163,7 @@ public class BGExtentBuilderGeneric {
         return state(value) { lhs, rhs in
             lhs.bg_unwrapped === rhs.bg_unwrapped
         }
-    }
+    }    
 }
 
 public class BGExtentBuilder<Extent: BGExtent>: BGExtentBuilderGeneric {
