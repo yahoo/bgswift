@@ -260,8 +260,10 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, O
     // These properties support combine and swiftui
     public weak var bindingInput: BGState? // could even be ourselves for two way binding
     private var _observableUpdated: BGEvent = .unknownPast
+    private var _observableAccessed: Bool = false
     public var observableValue: Type {
         get {
+            _observableAccessed = true
             if _event.sequence > _observableUpdated.sequence {
                 return traceValue
             } else {
@@ -310,10 +312,12 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, O
         }
         
         if !valueEquals(newValue) {
-            owner?.sideEffect { [weak self] in
-                if let self {
-                    self.objectWillChange.send()
-                    self._observableUpdated = self.event
+            if _observableAccessed {
+                owner?.sideEffect { [weak self] in
+                    if let self {
+                        self.objectWillChange.send()
+                        self._observableUpdated = self.event
+                    }
                 }
             }
             _prevValue = _value;
