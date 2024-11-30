@@ -249,13 +249,31 @@ public enum BGStateComparison {
     public enum Identical { case identical }
 }
 
-public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
+public class BGState<Type>: BGResource, BGResourceInternal, TransientResource, ObservableObject {
     var subsequents = Set<BGSubsequentLink>()
     weak var supplier: BGBehavior?
     weak var owner: BGExtent?
     var debugName: String?
     var _event: BGEvent = .unknownPast
     var _prevEvent: BGEvent = .unknownPast
+    
+    // These properties support combine and swiftui
+    public weak var bindingInput: BGState? // could even be ourselves for two way binding
+    private var _observableUpdated: BGEvent = .unknownPast
+    private var _observableAccessed: Bool = false
+    public var observableValue: Type {
+        get {
+            _observableAccessed = true
+            if _event.sequence > _observableUpdated.sequence {
+                return traceValue
+            } else {
+                return value
+            }
+        }
+        set {
+            bindingInput?.updateWithAction(newValue)
+        }
+    }
     
     var _value: Type
     var _prevValue: Type?
@@ -294,6 +312,14 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
         }
         
         if !valueEquals(newValue) {
+            if _observableAccessed {
+                owner?.sideEffect { [weak self] in
+                    if let self {
+                        self.objectWillChange.send()
+                        self._observableUpdated = self.event
+                    }
+                }
+            }
             _prevValue = _value;
             _prevEvent = _event;
             
@@ -338,6 +364,7 @@ public class BGState<Type>: BGResource, BGResourceInternal, TransientResource {
     func clearTransientValue() {
         _prevValue = nil
     }
+
 }
 
 public protocol BGDemandable {
@@ -356,3 +383,4 @@ extension BGDemandable {
         }
     }
 }
+
