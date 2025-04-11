@@ -61,6 +61,16 @@ class PriorityQueue {
         return popHeap()
     }
     
+    func peek() -> BGBehavior {
+        reheapIfNeeded()
+        
+        guard count > 0 else {
+            preconditionFailure()
+        }
+        
+        return Unmanaged<BGBehavior>.fromOpaque(CFBinaryHeapGetMinimum(heap)).takeUnretainedValue()
+    }
+    
     private func popHeap() -> BGBehavior {
         let value = Unmanaged<BGBehavior>.fromOpaque(CFBinaryHeapGetMinimum(heap)).takeRetainedValue()
         CFBinaryHeapRemoveMinimumValue(heap)

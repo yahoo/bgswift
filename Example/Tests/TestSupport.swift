@@ -16,12 +16,12 @@ func TestAssertionHit(_ code: () -> (), _ message: @autoclosure () -> String = "
 
 func CheckAssertionHit(_ code: () -> ()) -> Bool {
     var assertionHit = false
-    BGSwift.assertionFailureImpl = { _, _, _ in
+    BGSwift.onAssertionFailure = { _, _, _ in
         assertionHit = true
     }
     
     defer {
-        BGSwift.assertionFailureImpl = nil
+        BGSwift.onAssertionFailure = nil
     }
     
     code()

@@ -153,12 +153,14 @@ class EventTests: XCTestCase {
     }
     
     func testDateProviderGivesAlternateTime() {
-        let g2 = BGGraph {
-            return Date(timeIntervalSinceReferenceDate: 0)
+        g.dateProvider = {
+            Date(timeIntervalSinceReferenceDate: 123)
         }
-        g2.action {
-            XCTAssertEqual(g2.currentEvent?.timestamp, Date(timeIntervalSinceReferenceDate: 0))
+        var timeStamp: Date?
+        g.action {
+            timeStamp = self.g.currentEvent?.timestamp
         }
+        XCTAssertEqual(timeStamp, Date(timeIntervalSinceReferenceDate: 123))
     }
 }
 

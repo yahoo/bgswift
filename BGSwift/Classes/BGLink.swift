@@ -1,6 +1,6 @@
 //
 //  Copyright © 2021 Yahoo
-//    
+//
 
 import Foundation
 
@@ -40,11 +40,11 @@ struct BGSubsequentLink: Equatable, Hashable {
 }
 
 struct BGDemandLink: BGDemandable, Equatable, Hashable {
-    weak private(set) var resource: BGResourceInternal?
+    weak private(set) var resource: (any BGResourceInternal)?
     let type: LinkType
     let resourcePtr: ObjectIdentifier
     
-    init(resource: BGResourceInternal, type: LinkType) {
+    init(resource: any BGResourceInternal, type: LinkType) {
         self.resource = resource
         self.type = type
         resourcePtr = ObjectIdentifier(resource)

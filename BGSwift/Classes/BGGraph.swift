@@ -10,14 +10,16 @@ public class BGGraph {
         case async(queue: DispatchQueue? = nil)
     }
     
-    private let currentDate: () -> Date
+    public var dateProvider: (() -> Date)?
+    public var onAction: (() -> Void)?
+    
     private let behaviorQueue = PriorityQueue()
     private var actionQueue = [BGAction]()
     private var eventLoopState: EventLoopState?
     private var sequence: UInt = 0
     private var deferredRelease = [Any]()
     private var sideEffectQueue = [BGSideEffect]()
-    var updatedTransientResources = [TransientResource]()
+    var updatedTransientResources = [any BGResourceInternal]()
     
     private let mutex = Mutex(recursive: true)
     
@@ -25,19 +27,17 @@ public class BGGraph {
     
     var behaviorsWithModifiedSupplies = [BGBehavior]()
     var behaviorsWithModifiedDemands = [BGBehavior]()
-    var updatedResources = [BGResourceInternal]()
+    var updatedResources = [any BGResourceInternal]()
     private var untrackedBehaviors = [BGBehavior]()
     private var needsOrdering = [BGBehavior]()
     
     var currentRunningBehavior: BGBehavior?
+    var currentThread: Thread?
+    var lockCount: UInt = 0
     
-    static var checkUndeclaredDemands: Bool {
-        ProcessInfo.processInfo.arguments.contains("-BGGraphVerifyDemands")
-    }
+    public var checkUndeclaredDemands: Bool = false
     
-    public var currentEvent: BGEvent? {
-        get { eventLoopState?.event }
-    }
+    public var currentEvent: BGEvent? { eventLoopState?.event }
     
     var processingChanges: Bool {
         eventLoopState?.processingChanges ?? false
@@ -50,12 +50,16 @@ public class BGGraph {
     private var _lastEvent: BGEvent
     public var lastEvent: BGEvent { _lastEvent }
     
-    public init(dateProvider: @escaping () -> Date = { Date() }) {
+    public init() {
         self._lastEvent = BGEvent.unknownPast
         
         defaultQueue = DispatchQueue(label: "BGGraph.default", qos: .userInteractive)
-        
-        self.currentDate = dateProvider
+    }
+    
+    @available(*, deprecated, message: "Use `BGGraph.init()` and `BGGraph.dateProvider` instead.")
+    public convenience init(dateProvider: @escaping () -> Date = { Date() }) {
+        self.init()
+        self.dateProvider = dateProvider
     }
     
     public func action(file: String = #fileID, line: Int = #line, function: String = #function, syncStrategy: SynchronizationStrategy? = nil, body: @escaping (() -> Void)) {
@@ -67,17 +71,19 @@ public class BGGraph {
         switch syncStrategy {
         case .sync:
             mutex.balancedUnlock {
-                guard !processingAction else {
-                    assertionFailure("Nested actions cannot be executed synchronously.")
-                    return
+                mutexLocked {
+                    guard !processingAction else {
+                        assertionFailure("Nested actions cannot be executed synchronously.")
+                        return
+                    }
+                    guard !processingChanges else {
+                        assertionFailure("Actions originating from behavior closures cannot be executed synchronously.")
+                        return
+                    }
+                    
+                    actionQueue.append(BGAction(impulse: impulse, action: body))
+                    eventLoop()
                 }
-                guard !processingChanges else {
-                    assertionFailure("Actions originating from behavior closures cannot be executed synchronously.")
-                    return
-                }
-                
-                actionQueue.append(BGAction(impulse: impulse, action: body))
-                eventLoop()
             }
         case .async(let queue):
             (queue ?? defaultQueue).async {
@@ -85,14 +91,15 @@ public class BGGraph {
             }
         case .none:
             if mutex.tryLock() {
-                let action = BGAction(impulse: impulse, action: body)
-                actionQueue.append(action)
-                
-                // Run sync when the graph is idle or when called from a side-effect.
-                if !processingChanges {
-                    eventLoop()
+                mutexLocked {
+                    let action = BGAction(impulse: impulse, action: body)
+                    actionQueue.append(action)
+                    
+                    // Run sync when the graph is idle or when called from a side-effect.
+                    if !processingChanges {
+                        eventLoop()
+                    }
                 }
-                
                 mutex.unlock()
             } else {
                 // Cannot acquire the lock, so dispatch async
@@ -101,6 +108,20 @@ public class BGGraph {
         }
     }
     
+    func mutexLocked(_ execute: () -> Void) {
+        if lockCount == 0 {
+            currentThread = Thread.current
+        }
+        lockCount += 1
+        
+        execute()
+        
+        lockCount -= 1
+        if lockCount == 0 {
+            currentThread = nil
+        }
+    }
+        
     public func sideEffect(_ label: String? = nil, body: @escaping () -> Void) {
         guard let event = currentEvent else {
             assertionFailure("Side effects must be created inside actions or behaviors.")
@@ -121,7 +142,6 @@ public class BGGraph {
 
                         if !untrackedBehaviors.isEmpty {
                             commitUntrackedBehaviors()
-                            return
                         }
 
                         if !behaviorsWithModifiedSupplies.isEmpty {
@@ -153,19 +173,25 @@ public class BGGraph {
                         }
 
                         if !behaviorQueue.isEmpty {
+                            let order = behaviorQueue.peek().order
+                            var behaviorsToRun = [BGBehavior]()
+                            while !behaviorQueue.isEmpty, behaviorQueue.peek().order == order {
+                                behaviorsToRun.append(behaviorQueue.pop())
+                            }
+                            
+                            behaviorsToRun.forEach { behavior in
+                                let currentSequence = eventLoopState.event.sequence
+                                if behavior.removedSequence != currentSequence {
+                                    behavior.lastUpdateSequence = currentSequence
 
-                            let behavior = behaviorQueue.pop()
-
-                            let currentSequence = eventLoopState.event.sequence
-                            if behavior.removedSequence != currentSequence {
-                                behavior.lastUpdateSequence = currentSequence
-
-                                if let extent = behavior.owner {
-                                    currentRunningBehavior = behavior
-                                    behavior.runBlock(extent)
-                                    currentRunningBehavior = nil
+                                    if let extent = behavior.owner {
+                                        currentRunningBehavior = behavior
+                                        behavior.runBlock(extent)
+                                        currentRunningBehavior = nil
+                                    }
                                 }
                             }
+                            
                             return
                         }
                     }
@@ -209,14 +235,15 @@ public class BGGraph {
                 if let action = actionQueue.first {
                     actionQueue.removeFirst()
 
-                    let currentDate = self.currentDate()
+                    let currentDate = self.dateProvider?() ?? Date()
                     sequence += 1
                     let event = BGEvent(sequence: sequence, timestamp: currentDate, impulse: action.impulse)
 
                     let eventLoopState = EventLoopState(event: event)
                     self.eventLoopState = eventLoopState
-
+                    
                     action.action()
+                    onAction?()
                     eventLoopState.processingAction = false
 
                     // NOTE: We keep the action block around because it may capture capture and retain some external objects
@@ -293,8 +320,6 @@ public class BGGraph {
                                 needsOrdering.append(subsequent)
                             }
                         }
-                        
-                        // Take this opportunity to remove "dead" links with zero's weak references
                         deadLinks.forEach {
                             resource.subsequents.remove($0)
                         }
@@ -428,7 +453,6 @@ public class BGGraph {
                 }
             }
             
-            // Take this opportunity to remove "dead" links with zero's weak references
             deadLinks.forEach { behavior.demands.remove($0) }
             
             behavior.orderingState = .ordered
@@ -444,6 +468,7 @@ public class BGGraph {
         // algorithm, not a misconfigured graph
         // jlou 2/5/19 - These asserts are checking for graph implementation bugs, not for user error.
         assert(eventLoopState?.processingChanges ?? false, "Should not be activating behaviors in current phase.")
+        assert((behavior.graph?.lastEvent.sequence).map { $0 < sequence } ?? true, "Behavior already ran in this event.")
         
         if behavior.enqueuedSequence < sequence {
             behavior.enqueuedSequence = sequence
@@ -467,7 +492,7 @@ public class BGGraph {
         untrackedBehaviors.append(contentsOf: extent.behaviors)
     }
     
-    func removeExtent(resources: [BGResourceInternal], behaviors: [BGBehavior]) {
+    func removeExtent(resources: [any BGResourceInternal], behaviors: [BGBehavior]) {
         guard let eventLoopState = eventLoopState, eventLoopState.processingChanges else {
             assertionFailure("Can only remove extents during an event.")
             return
@@ -549,15 +574,17 @@ fileprivate class EventLoopState {
 }
 
 #if DEBUG
-var assertionFailureImpl: ((@autoclosure () -> String, StaticString, UInt) -> Void)? = nil
+public var onAssertionFailure: ((@autoclosure () -> String, StaticString, UInt) -> Void)? = nil
+public var onExtentCreated: ((_ extent: BGExtent) -> Void)? = nil
+public var onResourceCreated: ((_ extent: BGResource) -> Void)? = nil
 
 func assert(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
     if !condition() {
-        (assertionFailureImpl ?? Swift.assertionFailure)(message(), file, line)
+        (onAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
     }
 }
 
 func assertionFailure(_ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
-    (assertionFailureImpl ?? Swift.assertionFailure)(message(), file, line)
+    (onAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
 }
 #endif

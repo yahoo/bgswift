@@ -181,6 +181,13 @@ class BGStateTests : QuickSpec {
                 expect(didRun) == true
             }
             
+            it("can update resource before extent is added to graph") {
+                r_a.update(1)
+                
+                expect(ext.status) == .inactive
+                expect(r_a.value) == 1
+            }
+            
             describe("checks") {
                 
                 // @SAL we don't have a way of catching asserts yet
@@ -233,7 +240,7 @@ class BGStateUpdateTests: XCTestCase {
     }
         
     override func tearDown() {
-        assertionFailureImpl = nil
+        onAssertionFailure = nil
     }
     
     // MARK: Non-Equatable, Non-Object
