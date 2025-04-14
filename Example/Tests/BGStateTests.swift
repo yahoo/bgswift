@@ -327,6 +327,24 @@ class BGStateUpdateTests: XCTestCase {
         }
     }
     
+    func testEquatable_forced() {
+        let s = b.state("foo", comparison: .equal)
+        
+        let extent = BGExtent(builder: b)
+        
+        g.action {
+            extent.addToGraph()
+            
+            s.update("foo")
+            XCTAssertFalse(s.justUpdated())
+        }
+        
+        g.action {
+            s.update("foo", forced: true)
+            XCTAssertTrue(s.justUpdated())
+        }
+    }
+    
     // MARK: Non-Equatable, Object
     
     func testObject_default() {
@@ -453,6 +471,27 @@ class BGStateUpdateTests: XCTestCase {
         
         g.action {
             s.update(EquatableObject())
+            XCTAssertTrue(s.justUpdated())
+        }
+    }
+    
+    func testEquatableObject_forced() {
+        let obj = EquatableObject()
+        obj.failEquality = false
+        
+        let s = b.state(obj, comparison: .equal)
+        
+        let extent = BGExtent(builder: b)
+        
+        g.action {
+            extent.addToGraph()
+            
+            s.update(obj)
+            XCTAssertFalse(s.justUpdated())
+        }
+        
+        g.action {
+            s.update(obj, forced: true)
             XCTAssertTrue(s.justUpdated())
         }
     }
