@@ -181,6 +181,13 @@ class BGStateTests : QuickSpec {
                 expect(didRun) == true
             }
             
+            it("can update resource before extent is added to graph") {
+                r_a.update(1)
+                
+                expect(ext.status) == .inactive
+                expect(r_a.value) == 1
+            }
+            
             describe("checks") {
                 
                 // @SAL we don't have a way of catching asserts yet
@@ -233,7 +240,7 @@ class BGStateUpdateTests: XCTestCase {
     }
         
     override func tearDown() {
-        assertionFailureImpl = nil
+        onAssertionFailure = nil
     }
     
     // MARK: Non-Equatable, Non-Object
@@ -316,6 +323,24 @@ class BGStateUpdateTests: XCTestCase {
         
         g.action {
             s.update("bar")
+            XCTAssertTrue(s.justUpdated())
+        }
+    }
+    
+    func testEquatable_forced() {
+        let s = b.state("foo", comparison: .equal)
+        
+        let extent = BGExtent(builder: b)
+        
+        g.action {
+            extent.addToGraph()
+            
+            s.update("foo")
+            XCTAssertFalse(s.justUpdated())
+        }
+        
+        g.action {
+            s.update("foo", forced: true)
             XCTAssertTrue(s.justUpdated())
         }
     }
@@ -446,6 +471,27 @@ class BGStateUpdateTests: XCTestCase {
         
         g.action {
             s.update(EquatableObject())
+            XCTAssertTrue(s.justUpdated())
+        }
+    }
+    
+    func testEquatableObject_forced() {
+        let obj = EquatableObject()
+        obj.failEquality = false
+        
+        let s = b.state(obj, comparison: .equal)
+        
+        let extent = BGExtent(builder: b)
+        
+        g.action {
+            extent.addToGraph()
+            
+            s.update(obj)
+            XCTAssertFalse(s.justUpdated())
+        }
+        
+        g.action {
+            s.update(obj, forced: true)
             XCTAssertTrue(s.justUpdated())
         }
     }

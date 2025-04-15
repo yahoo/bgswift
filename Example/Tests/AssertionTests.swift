@@ -12,6 +12,7 @@ class AssertionTests: XCTestCase {
         var assertionHit = false
         
         let g = BGGraph()
+        g.checkUndeclaredDemands = true
         
         let b = BGExtentBuilder(graph: g)
         let r = b.moment()
@@ -36,6 +37,7 @@ class AssertionTests: XCTestCase {
         var assertionHit = false
         
         let g = BGGraph()
+        g.checkUndeclaredDemands = true
         
         let b = BGExtentBuilder(graph: g)
         let r = b.moment()

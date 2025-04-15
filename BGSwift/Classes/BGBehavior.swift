@@ -25,7 +25,7 @@ public class BGBehavior {
     var supplies = Set<WeakResource>()
     var demands = Set<BGDemandLink>()
     
-    var uncommittedDynamicSupplies: [BGResourceInternal]?
+    var uncommittedDynamicSupplies: [any BGResourceInternal]?
     var uncommittedDynamicDemands: [BGDemandable]?
     
     var uncommittedSupplies: Bool
@@ -64,9 +64,12 @@ public class BGBehavior {
     }
     
     public func setDynamicSupplies(_ supplies: [BGResource]) {
-        uncommittedDynamicSupplies = (supplies as! [BGResourceInternal])
+        uncommittedDynamicSupplies = (supplies.map { $0.asInternal} )
         uncommittedSupplies = true
-        graph?.updateSupplies(behavior: self)
+        
+        if let owner = owner, owner.status == .added {
+            owner.graph.updateSupplies(behavior: self)
+        }
     }
     
     public func setDynamicSupplies(_ supplies: BGResource...) {
@@ -76,17 +79,20 @@ public class BGBehavior {
     public func setDynamicDemands(_ demands: [BGDemandable]) {
         uncommittedDynamicDemands = demands
         uncommittedDemands = true
-        graph?.updateDemands(behavior: self)
+        
+        if let owner = owner, owner.status == .added {
+            owner.graph.updateDemands(behavior: self)
+        }
     }
     
     public func setDynamicDemands(_ demands: BGDemandable...) {
-        setDynamicDemands(demands as [BGDemandable])
+        setDynamicDemands(demands)
     }
 }
 
 extension BGBehavior: CustomDebugStringConvertible {
     public var debugDescription: String {
-        return "<\(String(describing: Self.self)):\(String(format: "%018p", unsafeBitCast(self, to: Int64.self))) (\(debugName ?? "Unlabeled"))>"
+        "<\(String(describing: Self.self)):\(String(format: "%018p", unsafeBitCast(self, to: Int64.self))) (\(debugName ?? "Unlabeled"))>"
     }
 }
 
