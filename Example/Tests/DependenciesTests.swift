@@ -4,6 +4,7 @@
 
 
 import Foundation
+import XCTest
 import Quick
 import Nimble
 @testable import BGSwift

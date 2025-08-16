@@ -3,6 +3,7 @@
 //    
 
 import Foundation
+import XCTest
 import Quick
 import Nimble
 @testable import BGSwift
@@ -182,6 +183,8 @@ class BGStateTests : QuickSpec {
             }
             
             it("can update resource before extent is added to graph") {
+                //ext = BGExtent(builder: bld)
+
                 r_a.update(1)
                 
                 expect(ext.status) == .inactive
@@ -193,9 +196,9 @@ class BGStateTests : QuickSpec {
                 // @SAL we don't have a way of catching asserts yet
                 // so these are disabled
                 xit("part of graph before updating") {
-                    expect {
-                        r_a.updateWithAction(1)
-                    }.to(raiseException())
+                    // expect {
+                    //     r_a.updateWithAction(1)
+                    // }.to(raiseException())
                 }
                 
                 // @SAL-- 10/1/2021 basic canUpdate checks are in the moment tests
