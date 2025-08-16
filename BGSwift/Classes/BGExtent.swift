@@ -12,6 +12,7 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
     
     var _added: BGMoment
     public var added: BGResource { _added }
+    var _mirror: Mirror?
     
     public enum Status {
         case inactive
@@ -31,22 +32,6 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
         builder.extent = self
         
         self.addComponents(from: builder)
-        
-        var _mirror: Mirror? = Mirror(reflecting: self)
-        while let mirror = _mirror, mirror.subjectType is BGExtent.Type {
-            mirror.children.forEach { child in
-                if let resource = child.value as? (any BGResourceInternal) {
-                    if resource.debugName == nil {
-                        resource.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Resource")"
-                    }
-                } else if let behavior = child.value as? BGBehavior {
-                    if behavior.debugName == nil {
-                        behavior.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Behavior")"
-                    }
-                }
-            }
-            _mirror = mirror.superclassMirror
-        }
         
 #if DEBUG
         onExtentCreated?(self)
@@ -119,6 +104,26 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
         self.behaviors.removeAll()
         
         graph.removeExtent(resources: resources, behaviors: behaviors)
+    }
+    
+    internal func loadDebugNames() {
+        if (_mirror == nil) {
+            _mirror = Mirror(reflecting: self)
+            while let mirror = _mirror, mirror.subjectType is BGExtent.Type {
+                mirror.children.forEach { child in
+                    if let resource = child.value as? (any BGResourceInternal) {
+                        if resource.debugName == nil {
+                            resource.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Resource")"
+                        }
+                    } else if let behavior = child.value as? BGBehavior {
+                        if behavior.debugName == nil {
+                            behavior.debugName = "\(String(describing: Self.self)).\(child.label ?? "Anonymous_Behavior")"
+                        }
+                    }
+                }
+                _mirror = mirror.superclassMirror
+            }
+        }
     }
     
     public func sideEffect(file: String = #fileID, line: Int = #line, function: String = #function, _ body: @escaping () -> Void) {

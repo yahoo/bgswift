@@ -235,7 +235,18 @@ public class BGMoment: BGResource, BGResourceInternal {
     
     // MARK: BGResource
     
-    public var debugName: String?
+    var _debugName: String?
+    public var debugName: String? {
+        get {
+            if _debugName != nil {
+                return _debugName
+            } else {
+                self.owner?.loadDebugNames()
+                return _debugName
+            }
+        }
+        set { _debugName = newValue }
+    }
     public var _event: BGEvent = .unknownPast
     
     // MARK: BGResourceInternal
@@ -290,7 +301,18 @@ public class BGTypedMoment<Type>: BGResource, BGResourceInternal {
     
     // MARK: BGResource
     
-    public var debugName: String?
+    var _debugName: String?
+    public var debugName: String? {
+        get {
+            if _debugName != nil {
+                return _debugName
+            } else {
+                self.owner?.loadDebugNames()
+                return _debugName
+            }
+        }
+        set { _debugName = newValue }
+    }
     public var _event: BGEvent = .unknownPast
     
     // MARK: BGResourceInternal
@@ -408,7 +430,18 @@ public class BGState<Type>: BGResource, BGResourceInternal {
     
     // MARK: BGResource
     
-    public var debugName: String?
+    var _debugName: String?
+    public var debugName: String? {
+        get {
+            if _debugName != nil {
+                return _debugName
+            } else {
+                self.owner?.loadDebugNames()
+                return _debugName
+            }
+        }
+        set { _debugName = newValue }
+    }
     public var _event: BGEvent = .unknownPast
     
     // MARK: BGResourceInternal
