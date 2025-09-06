@@ -67,6 +67,7 @@ class ConcurrencyTests: XCTestCase {
     }
     
     func testSyncActionRunWhenOtherActionInProgressWaitsAndRunsSynchronously() {
+        //@SAL 9/6/2023 -- I'm having a hard time figuring out what scenario this test is trying to cover
         let innerActionRan = XCTestExpectation()
         
         let g = BGGraph()
@@ -88,10 +89,13 @@ class ConcurrencyTests: XCTestCase {
                     // won't be the case if we choose a sufficient sleep interval.
                     g.action(syncStrategy: .sync) {
                         actionRan = true
-                        innerActionRan.fulfill()
                     }
-                    
                     waitedForInnerAction = actionRan
+                    // @SAL 9/6/2023 -- Moved this here because the action was running syncrhronously(as expected)
+                    // but as soon as innerActionRan was fulfilled, the test would end and the assertion
+                    // this may be because there are now always side effects (because deferred release clearing is a side effect)
+                    // So it now always synchronizes onto the main thread which gives it a chance for the wait below to be satisfied
+                    innerActionRan.fulfill()
                 }
             }
         }
