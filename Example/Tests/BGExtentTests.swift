@@ -50,6 +50,19 @@ class BGExtentTests: XCTestCase {
         XCTAssertFalse(nonAddedRun)
     }
 
+    func testCanGetResourcesAndBehaviors() {
+        b.behavior().runs { _ in }
+        b.behavior().runs { _ in }
+        e = BGExtent(builder: b)
+        
+        // |> When it is added
+        e.addToGraphWithAction()
+        
+        // |> Then we can get the resources and behaviors
+        XCTAssertEqual(4, e.allResources.count) // _added is a resource also
+        XCTAssertEqual(2, e.allBehaviors.count)
+    }
+    
     func testCheckCannotAddExtentToGraphMultipleTimes() {
         // NOTE: This is primarily to prevent user error.
         // Perhaps it makes sense to remove/add extents in the future.

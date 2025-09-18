@@ -9,6 +9,10 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
     
     var resources = [any BGResourceInternal]()
     var behaviors = [BGBehavior]()
+    /// Return snapshot of all the resources on the extent.
+    public var allResources: [any BGResource] { resources }
+    /// Return snapshot of all the behaviors on the extent.
+    public var allBehaviors: [BGBehavior] { behaviors }
     
     var _added: BGMoment
     public var added: BGResource { _added }
