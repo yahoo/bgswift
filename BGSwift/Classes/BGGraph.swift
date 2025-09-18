@@ -198,31 +198,41 @@ public class BGGraph {
 
                     eventLoopState.processingChanges = false
 
+                    // clearing transient resources is a side effect because it may cause deallocs
+                    if !updatedTransientResources.isEmpty {
+                        // make copy so we just add side effect once per event loop
+                        var localTransientResources = updatedTransientResources
+                        self.sideEffect {
+                            while !localTransientResources.isEmpty {
+                                localTransientResources.removeFirst().clearTransientValue()
+                            }
+                        }
+                        updatedTransientResources.removeAll()
+                    }
+
+                    // releasing deferred objects is a side effect because it may cause deallocs
+                    if !deferredRelease.isEmpty {
+                        // make copy so we just add side effect once per event loop
+                        var localDeferredRelease = deferredRelease
+                        self.sideEffect {
+                            if !localDeferredRelease.isEmpty {
+                                autoreleasepool {
+                                    // Temporarily retain values on the stack so that `removeAll()` is completed before any object
+                                    // is released to avoid a crash for calling `deferredRelease.isEmpty` above while `deferredRelease` is
+                                    // being modified (in the case where object's dealloc triggers a synchronous action)
+                                    localDeferredRelease.removeAll()
+                                }
+                            }
+                        }
+                        deferredRelease.removeAll()
+                    }
+                    
                     if !sideEffectQueue.isEmpty {
                         executeSideEffect {
                             while !sideEffectQueue.isEmpty {
                                 let sideEffect = sideEffectQueue.removeFirst()
                                 sideEffect.run()
                             }
-                        }
-                        return
-                    }
-
-                    if !updatedTransientResources.isEmpty {
-                        while !updatedTransientResources.isEmpty {
-                            updatedTransientResources.removeFirst().clearTransientValue()
-                        }
-                        return
-                    }
-
-                    if !deferredRelease.isEmpty {
-                        autoreleasepool {
-                            // Temporarily retain values on the stack so that `removeAll()` is completed before any object
-                            // is released to avoid a crash for calling `deferredRelease.isEmpty` above while `deferredRelease` is
-                            // being modified (in the case where object's dealloc triggers a synchronous action)
-                            let toRelease = deferredRelease
-                            _ = toRelease // This line is needed to silence the warning that `toRelease` is never used.
-                            deferredRelease.removeAll()
                         }
                         return
                     }
