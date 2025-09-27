@@ -187,6 +187,42 @@ class BGStateTests : XCTestCase {
 //                expect(r_a.value) == 1
 //            }
     
+    func testCanUpdateStateBeforeAdding() {
+        // |> Given a state resource that hasn't been added
+        let r = bld.state(0)
+        ext = BGExtent(builder: bld)
+        
+        // |> When we update
+        r.setInitialValue(1)
+        // |> Then it's value is the new initial value
+        XCTAssertEqual(r.value, 1)
+        XCTAssertEqual(r._prevValue, 1)
+    }
+    
+    func testCanUpdateStateBeforeBuildingExtent() {
+        // |> Given a state resource that hasn't been added
+        let r = bld.state(0)
+        
+        // |> When we update
+        r.setInitialValue(1)
+        // |> Then it's value is the new initial value
+        XCTAssertEqual(r.value, 1)
+        XCTAssertEqual(r._prevValue, 1)
+    }
+    
+    func testCannotSetInitialValueAfterAdding() {
+        // |> Given a state that has been added
+        let r = bld.state(0)
+        ext = BGExtent(builder: bld)
+        ext.addToGraphWithAction()
+        
+        // |> when we try to set initial value
+        // |> then it will assert
+        TestAssertionHit(graph: g) {
+            r.setInitialValue(1)
+        }
+    }
+    
     func testEnsuresCanUpdateChecksAreRun() {
         // NOTE: there are multiple canUpdate checks, this just ensures that
         // code path is followed

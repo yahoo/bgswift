@@ -381,6 +381,12 @@ public class BGState<Type>: BGResource, BGResourceInternal {
         }
     }
     
+    func setInitialValue(_ value: Type) {
+        graph?.assert(owner == nil || owner?.status == .inactive)
+        _prevValue = value
+        _value = value
+    }
+    
     public func update(_ newValue: Type, forced: Bool = false) {
         guard case .updateable(let graph, let event) = updateable else {
             return
