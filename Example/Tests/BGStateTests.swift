@@ -232,7 +232,7 @@ class BGStateTests : XCTestCase {
         ext = BGExtent(builder: bld)
         ext.addToGraphWithAction()
         
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             r_a.updateWithAction(1)
         }
     }
@@ -260,7 +260,7 @@ class BGStateUpdateTests: XCTestCase {
     }
         
     override func tearDown() {
-        onAssertionFailure = nil
+        g.debugOnAssertionFailure = nil
     }
     
     // MARK: Non-Equatable, Non-Object

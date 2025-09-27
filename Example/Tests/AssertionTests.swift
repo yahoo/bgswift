@@ -22,7 +22,7 @@ class AssertionTests: XCTestCase {
         }
         
         b.behavior().demands([b.added]).runs { extent in
-            assertionHit = CheckAssertionHit {
+            assertionHit = CheckAssertionHit(graph: g) {
                 _ = r.justUpdated()
             }
         }
@@ -43,7 +43,7 @@ class AssertionTests: XCTestCase {
         let r = b.moment()
         
         b.behavior().demands([b.added]).runs { extent in
-            assertionHit = CheckAssertionHit {
+            assertionHit = CheckAssertionHit(graph: g) {
                 _ = r.justUpdated()
             }
         }

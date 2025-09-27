@@ -29,6 +29,7 @@ public class BGGraph {
     var behaviorsWithModifiedDemands = [BGBehavior]()
     var updatedResources = [any BGResourceInternal]()
     private var untrackedBehaviors = [BGBehavior]()
+    private var untrackedExtents = [BGExtent]()
     private var needsOrdering = [BGBehavior]()
     
     var currentRunningBehavior: BGBehavior?
@@ -38,6 +39,9 @@ public class BGGraph {
     public var checkUndeclaredDemands: Bool = false
     
     public var currentEvent: BGEvent? { eventLoopState?.event }
+    
+    public var debugOnExtentAdded: ((BGExtent) -> Void)?
+    public var debugOnAssertionFailure: ((@autoclosure () -> String, StaticString, UInt) -> Void)?
     
     var processingChanges: Bool {
         eventLoopState?.processingChanges ?? false
@@ -73,11 +77,11 @@ public class BGGraph {
             mutex.balancedUnlock {
                 mutexLocked {
                     guard !processingAction else {
-                        assertionFailure("Nested actions cannot be executed synchronously.")
+                        self.assertionFailure("Nested actions cannot be executed synchronously.")
                         return
                     }
                     guard !processingChanges else {
-                        assertionFailure("Actions originating from behavior closures cannot be executed synchronously.")
+                        self.assertionFailure("Actions originating from behavior closures cannot be executed synchronously.")
                         return
                     }
                     
@@ -124,7 +128,7 @@ public class BGGraph {
         
     public func sideEffect(_ label: String? = nil, body: @escaping () -> Void) {
         guard let event = currentEvent else {
-            assertionFailure("Side effects must be created inside actions or behaviors.")
+            self.assertionFailure("Side effects must be created inside actions or behaviors.")
             return
         }
         
@@ -156,6 +160,15 @@ public class BGGraph {
                             orderBehaviors()
                         }
 
+                        if !untrackedExtents.isEmpty {
+                            if let debugOnExtentAdded {
+                                for extent in untrackedExtents {
+                                    debugOnExtentAdded(extent)
+                                }
+                            }
+                            untrackedExtents.removeAll()
+                        }
+                        
                         if !updatedResources.isEmpty {
                             updatedResources.forEach {
                                 for subsequent in $0.subsequents {
@@ -296,7 +309,7 @@ public class BGGraph {
                 behavior.uncommittedDynamicSupplies?.forEach {
                     let supplier = $0.supplier
                     guard supplier === behavior || supplier == nil else {
-                        assertionFailure("Resource is already supplied by a different behavior.")
+                        self.assertionFailure("Resource is already supplied by a different behavior.")
                         return
                     }
                     newSupplies.insert($0.weakReference)
@@ -440,7 +453,7 @@ public class BGGraph {
     private func sortDFS(behavior: BGBehavior, needsReheap: inout Bool) {
         guard behavior.orderingState != .ordering else {
             // assert or fail?
-            assert(behavior.orderingState != .ordering, "Dependency cycle detected")
+            self.assert(behavior.orderingState != .ordering, "Dependency cycle detected")
             return
         }
         
@@ -477,8 +490,8 @@ public class BGGraph {
         // @SAL 8/26/2019-- I'm not sure how either of these would trigger, it seems they are both a result of a broken
         // algorithm, not a misconfigured graph
         // jlou 2/5/19 - These asserts are checking for graph implementation bugs, not for user error.
-        assert(eventLoopState?.processingChanges ?? false, "Should not be activating behaviors in current phase.")
-        assert((behavior.graph?.lastEvent.sequence).map { $0 < sequence } ?? true, "Behavior already ran in this event.")
+        self.assert(eventLoopState?.processingChanges ?? false, "Should not be activating behaviors in current phase.")
+        self.assert((behavior.graph?.lastEvent.sequence).map { $0 < sequence } ?? true, "Behavior already ran in this event.")
         
         if behavior.enqueuedSequence < sequence {
             behavior.enqueuedSequence = sequence
@@ -489,22 +502,23 @@ public class BGGraph {
     
     func addExtent(_ extent: BGExtent) {
         guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Extents must be added during an event.")
+            self.assertionFailure("Extents must be added during an event.")
             return
         }
         guard extent.status == .inactive else {
-            assertionFailure("Extent can only be added once.")
+            self.assertionFailure("Extent can only be added once.")
             return
         }
         
         extent._added.update()
         extent.status = .added
+        untrackedExtents.append(extent)
         untrackedBehaviors.append(contentsOf: extent.behaviors)
     }
     
     func removeExtent(resources: [any BGResourceInternal], behaviors: [BGBehavior]) {
         guard let eventLoopState = eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only remove extents during an event.")
+            self.assertionFailure("Can only remove extents during an event.")
             return
         }
         
@@ -541,7 +555,7 @@ public class BGGraph {
     
     func updateDemands(behavior: BGBehavior) {
         guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only update demands during an event.")
+            self.assertionFailure("Can only update demands during an event.")
             return
         }
         behaviorsWithModifiedDemands.append(behavior)
@@ -549,7 +563,7 @@ public class BGGraph {
     
     func updateSupplies(behavior: BGBehavior) {
         guard let eventLoopState = self.eventLoopState, eventLoopState.processingChanges else {
-            assertionFailure("Can only update supplies during an event.")
+            self.assertionFailure("Can only update supplies during an event.")
             return
         }
         behaviorsWithModifiedSupplies.append(behavior)
@@ -572,6 +586,17 @@ public class BGGraph {
     static func impulseString(file: String, line: Int, function: String) -> String {
         "\(function)@\(file):\(line)"
     }
+    
+    func assert(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
+        if !condition() {
+            (debugOnAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
+        }
+    }
+
+    func assertionFailure(_ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
+        (debugOnAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
+    }
+
 }
 
 fileprivate class EventLoopState {
@@ -582,19 +607,3 @@ fileprivate class EventLoopState {
         self.event = event
     }
 }
-
-#if DEBUG
-public var onAssertionFailure: ((@autoclosure () -> String, StaticString, UInt) -> Void)? = nil
-public var onExtentCreated: ((_ extent: BGExtent) -> Void)? = nil
-public var onResourceCreated: ((_ extent: BGResource) -> Void)? = nil
-
-func assert(_ condition: @autoclosure () -> Bool, _ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
-    if !condition() {
-        (onAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
-    }
-}
-
-func assertionFailure(_ message: @autoclosure () -> String = String(), file: StaticString = #file, line: UInt = #line) {
-    (onAssertionFailure ?? Swift.assertionFailure)(message(), file, line)
-}
-#endif
