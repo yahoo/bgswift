@@ -734,7 +734,7 @@ class DynamicsTests: XCTestCase {
         }
 
         // |> Then the most recent update should hold
-        let failed = CheckAssertionHit {
+        let failed = CheckAssertionHit(graph: g) {
             rA.updateWithAction(1)
         }
         XCTAssertFalse(failed)

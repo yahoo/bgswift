@@ -243,7 +243,7 @@ class ConcurrencyTests: XCTestCase {
     
     func testSyncNestedActionsDisallowed() {
         let g = BGGraph()
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             g.action {
                 g.action(syncStrategy:.sync) {
                 }
@@ -271,7 +271,7 @@ class ConcurrencyTests: XCTestCase {
         
         // |> When that behavior runs
         // |> Then it should throw an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             r1.updateWithAction()
         }
     }
@@ -302,7 +302,7 @@ class ConcurrencyTests: XCTestCase {
         
         // |> When that behavior runs
         // |> Then is should be allowed?
-        let failed = CheckAssertionHit {
+        let failed = CheckAssertionHit(graph: g) {
             r1.updateWithAction()
         }
         XCTAssertFalse(failed)

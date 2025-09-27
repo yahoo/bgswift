@@ -73,7 +73,7 @@ class BGExtentTests: XCTestCase {
         
         // |> When it is added again
         // |> Then there is an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             e.addToGraphWithAction()
         }
     }
@@ -84,7 +84,7 @@ class BGExtentTests: XCTestCase {
         
         // |> When added outside an event
         // |> Then there is an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             e.addToGraph()
         }
     }
@@ -96,7 +96,7 @@ class BGExtentTests: XCTestCase {
         
         // |> When added outside an event
         // |> Then there is an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             e.removeFromGraph()
         }
     }
@@ -115,6 +115,42 @@ class BGExtentTests: XCTestCase {
         let e2 = MyExtent(graph: self.g)
         
         XCTAssertEqual(e2.r1.debugName, "MyExtent.r1")
+    }
+    
+    func testCanTrackWhenExtentsAreAdded() {
+        // |> Given a graph with debugOnExtentAdded defined
+        var addedExtents: [BGExtent] = []
+        var addedResources: [any BGResource] = []
+        g.debugOnExtentAdded = {
+            addedExtents.append($0)
+            addedResources.append(contentsOf: $0.allResources)
+        }
+        
+        // |> When an extent is added
+        let b1 = BGExtentBuilder<BGExtent>(graph: g)
+        let _ = b1.moment()
+        let e1 = BGExtent(builder: b1)
+        
+        e1.addToGraphWithAction()
+        
+        // |> Then callback is called
+        XCTAssertEqual(e1, addedExtents[0])
+        XCTAssertEqual(1, addedExtents.count)
+        XCTAssertEqual(2, addedResources.count) // _added is a default resource
+        
+        // |> And when callback is undefined
+        g.debugOnExtentAdded = nil
+        
+        // and another extent is added
+        let b2 = BGExtentBuilder<BGExtent>(graph: g)
+        let _ = b2.moment()
+        let e2 = BGExtent(builder: b2)
+        
+        e2.addToGraphWithAction()
+        
+        // |> Then callback is not called
+        XCTAssertEqual(1, addedExtents.count)
+        XCTAssertEqual(2, addedResources.count)
     }
     
 }

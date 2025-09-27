@@ -145,7 +145,7 @@ class EventTests: XCTestCase {
     func testSideEffectsMustBeCreatedInsideEvent() {
         // |> When a side effect is created outside of an event
         // |> Then an error will be raised
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             self.g.sideEffect {
                 // nothing
             }
