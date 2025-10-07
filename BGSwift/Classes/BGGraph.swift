@@ -14,6 +14,7 @@ public class BGGraph {
     public var onAction: (() -> Void)?
     
     private let behaviorQueue = PriorityQueue()
+    private var mainThreadBehaviorsToRun = [BGBehavior]()
     private var actionQueue = [BGAction]()
     private var eventLoopState: EventLoopState?
     private var sequence: UInt = 0
@@ -139,6 +140,22 @@ public class BGGraph {
                 if let eventLoopState = self.eventLoopState {
 
                     if eventLoopState.processingChanges {
+                        
+                        // Continue to process any behaviors before any processing any graph structure changes
+                        if !mainThreadBehaviorsToRun.isEmpty {
+                            executeOnMainFromRunloop {
+                                guard !mainThreadBehaviorsToRun.isEmpty else {
+                                    return
+                                }
+                                
+                                let behaviorsToRun = mainThreadBehaviorsToRun
+                                mainThreadBehaviorsToRun.removeAll()
+                                
+                                behaviorsToRun.forEach {
+                                    runBehavior($0, sequence: eventLoopState.event.sequence)
+                                }
+                            }
+                        }
 
                         if !untrackedBehaviors.isEmpty {
                             commitUntrackedBehaviors()
@@ -173,23 +190,24 @@ public class BGGraph {
                         }
 
                         if !behaviorQueue.isEmpty {
+                            // We want to run all behaviors of the same order together before processing any changes
+                            // to the graph structure (e.g. behavior, supply/demand changes, added/removed extents, etc)
+                            // to potentially reduce the amount of graph sorts we need to perform
+                            
                             let order = behaviorQueue.peek().order
                             var behaviorsToRun = [BGBehavior]()
+                            
                             while !behaviorQueue.isEmpty, behaviorQueue.peek().order == order {
-                                behaviorsToRun.append(behaviorQueue.pop())
+                                let behavior = behaviorQueue.pop()
+                                if behavior.requiresMainThread {
+                                    mainThreadBehaviorsToRun.append(behavior)
+                                } else {
+                                    behaviorsToRun.append(behavior)
+                                }
                             }
                             
-                            behaviorsToRun.forEach { behavior in
-                                let currentSequence = eventLoopState.event.sequence
-                                if behavior.removedSequence != currentSequence {
-                                    behavior.lastUpdateSequence = currentSequence
-
-                                    if let extent = behavior.owner {
-                                        currentRunningBehavior = behavior
-                                        behavior.runBlock(extent)
-                                        currentRunningBehavior = nil
-                                    }
-                                }
+                            behaviorsToRun.forEach {
+                                runBehavior($0, sequence: eventLoopState.event.sequence)
                             }
                             
                             return
@@ -228,7 +246,7 @@ public class BGGraph {
                     }
                     
                     if !sideEffectQueue.isEmpty {
-                        executeSideEffect {
+                        executeOnMainFromRunloop {
                             while !sideEffectQueue.isEmpty {
                                 let sideEffect = sideEffectQueue.removeFirst()
                                 sideEffect.run()
@@ -266,6 +284,18 @@ public class BGGraph {
                 }
                 
                 finished = true
+            }
+        }
+    }
+    
+    private func runBehavior(_ behavior: BGBehavior, sequence: UInt) {
+        if behavior.removedSequence != sequence {
+            behavior.lastUpdateSequence = sequence
+
+            if let extent = behavior.owner {
+                currentRunningBehavior = behavior
+                behavior.runBlock(extent)
+                currentRunningBehavior = nil
             }
         }
     }
@@ -555,7 +585,7 @@ public class BGGraph {
         behaviorsWithModifiedSupplies.append(behavior)
     }
     
-    func executeSideEffect(_ work: () -> Void) {
+    func executeOnMainFromRunloop(_ work: () -> Void) {
         if Thread.current.isMainThread {
             work()
         } else {
