@@ -31,13 +31,16 @@ public class BGBehavior {
     var uncommittedSupplies: Bool
     var uncommittedDemands: Bool
     
+    let requiresMainThread: Bool
+    
     let runBlock: (BGExtent) -> Void
     
     weak var owner: BGExtent?
     var graph: BGGraph? { owner?.graph }
     
     
-    internal init(graph: BGGraph, supplies: [BGResource], demands: [BGDemandable], body: @escaping (BGExtent) -> Void) {
+    internal init(graph: BGGraph, supplies: [BGResource], demands: [BGDemandable], requiresMainThread: Bool, body: @escaping (BGExtent) -> Void) {
+        self.requiresMainThread = requiresMainThread
         self.runBlock = body
         
         uncommittedSupplies = !supplies.isEmpty

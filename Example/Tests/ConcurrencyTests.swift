@@ -307,5 +307,42 @@ class ConcurrencyTests: XCTestCase {
         }
         XCTAssertFalse(failed)
     }
+      
+    func testBehaviorsRunOnMainThreadWhenConfigured() {
+        let g = BGGraph()
+        let b = BGExtentBuilder(graph: g)
+        let r1 = b.moment()
         
+        let backgroundWorkRan = XCTestExpectation()
+        
+        var behavior1RanOnMain: Bool?
+        var behavior2RanOnMain: Bool?
+        
+        b.behavior()
+            .demands(r1)
+            .requiresMainThread()
+            .runs { extent in
+                behavior1RanOnMain = Thread.isMainThread
+            }
+        
+        b.behavior()
+            .demands(r1)
+            .runs { extent in
+                behavior2RanOnMain = Thread.isMainThread
+            }
+        
+        let e = BGExtent(builder: b)
+        e.addToGraphWithAction()
+        
+        DispatchQueue.global(qos: .default).async {
+            g.action(syncStrategy: .sync) {
+                r1.update()
+            }
+            backgroundWorkRan.fulfill()
+        }
+        
+        wait(for: [backgroundWorkRan], timeout: ASYNC_EXPECTATION_TIMEOUT)
+        XCTAssertEqual(behavior1RanOnMain, true)
+        XCTAssertEqual(behavior2RanOnMain, false)
+    }
 }

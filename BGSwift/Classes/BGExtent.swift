@@ -252,6 +252,7 @@ public class BGExtentBuilderGeneric: NSObject {
                                     postDynamicSupplies: BGDynamicSupplyBuilderGeneric?,
                                     preDynamicDemands: BGDynamicDemandBuilderGeneric?,
                                     postDynamicDemands: BGDynamicDemandBuilderGeneric?,
+                                    requiresMainThread: Bool,
                                     body: @escaping (_ extent: Extent) -> Void) -> BGBehavior {
         weak var weakMainBehavior: BGBehavior?
         
@@ -338,7 +339,10 @@ public class BGExtentBuilderGeneric: NSObject {
                 }
         }
         
-        let mainBehavior = BGBehavior(graph: graph, supplies: mainBehaviorStaticSupplies, demands: mainBehaviorStaticDemands) { extent in
+        let mainBehavior = BGBehavior(graph: graph,
+                                      supplies: mainBehaviorStaticSupplies,
+                                      demands: mainBehaviorStaticDemands,
+                                      requiresMainThread: requiresMainThread) { extent in
             body(extent as! Extent)
         }
         weakMainBehavior = mainBehavior
@@ -392,6 +396,7 @@ public class BGBehaviorBuilderGeneric: NSObject {
     var _postDynamicSupplies: BGDynamicSupplyBuilderGeneric?
     var _preDynamicDemands: BGDynamicDemandBuilderGeneric?
     var _postDynamicDemands: BGDynamicDemandBuilderGeneric?
+    var _requiresMainThread: Bool = false
     
     public init(_ builder: BGExtentBuilderGeneric) {
         self.builder = builder
@@ -418,6 +423,12 @@ public class BGBehaviorBuilderGeneric: NSObject {
     @discardableResult
     public func demands(_ demands: BGDemandable...) -> Self {
         self.demands(demands as [BGDemandable])
+    }
+    
+    @discardableResult
+    public func requiresMainThread(_ requiresMainThread: Bool = true) -> Self {
+        self._requiresMainThread = requiresMainThread
+        return self
     }
     
     @discardableResult
@@ -454,6 +465,7 @@ public class BGBehaviorBuilderGeneric: NSObject {
                          postDynamicSupplies: _postDynamicSupplies,
                          preDynamicDemands: _preDynamicDemands,
                          postDynamicDemands: _postDynamicDemands,
+                         requiresMainThread: _requiresMainThread,
                          body: body)
     }
 }
@@ -479,7 +491,8 @@ public class BGBehaviorBuilder<Extent: BGExtent> : BGBehaviorBuilderGeneric {
                          preDynamicSupplies: _preDynamicSupplies,
                          postDynamicSupplies: _postDynamicSupplies,
                          preDynamicDemands: _preDynamicDemands,
-                         postDynamicDemands: _postDynamicDemands) { extent in
+                         postDynamicDemands: _postDynamicDemands,
+                         requiresMainThread: _requiresMainThread) { extent in
             body(extent as! Extent)
         }
     }
@@ -512,7 +525,8 @@ public class BGParameterizedBehaviorBuilder<Extent: BGExtent, Params> : BGBehavi
                                 preDynamicSupplies: _preDynamicSupplies,
                                 postDynamicSupplies: _postDynamicSupplies,
                                 preDynamicDemands: _preDynamicDemands,
-                                postDynamicDemands: _postDynamicDemands) { extent in
+                                postDynamicDemands: _postDynamicDemands,
+                                requiresMainThread: _requiresMainThread) { extent in
             if let params = paramsBlock(extent as! Extent) {
                 body(params)
             }
