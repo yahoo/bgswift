@@ -129,7 +129,7 @@ class BGMomentTests: XCTestCase {
         // |> When it is updated
         var errorHappened = false
         g.action {
-            errorHappened = CheckAssertionHit {
+            errorHappened = CheckAssertionHit(graph: self.g) {
                 mr1.update()
             }
         }
@@ -147,7 +147,7 @@ class BGMomentTests: XCTestCase {
         
         // |> When updating outside of an event
         // |> Then it should fail
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             mr1.update()
         }
     }
@@ -168,7 +168,7 @@ class BGMomentTests: XCTestCase {
 
         // |> When it is updated by the wrong behavior
         // |> Then it should throw
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             self.g.action {
                 mr1.update()
             }
@@ -181,7 +181,7 @@ class BGMomentTests: XCTestCase {
         let mr2 = bld.moment()
         var updateFailed = false
         bld.behavior().demands([mr1]).runs { extent in
-            updateFailed = CheckAssertionHit {
+            updateFailed = CheckAssertionHit(graph: self.g) {
                 mr2.update()
             }
         }
@@ -208,7 +208,7 @@ class BGMomentTests: XCTestCase {
         // |> When we try updating that moment in an action
         var updateFailed = false
         self.g.action {
-            updateFailed = CheckAssertionHit {
+            updateFailed = CheckAssertionHit(graph: self.g) {
                 mr1.update()
             }
         }

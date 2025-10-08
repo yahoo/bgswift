@@ -28,7 +28,7 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
     public var debugName: String?
     
     public init(builder: BGExtentBuilderGeneric) {
-        assert(builder.extent == nil)
+        builder.graph.assert(builder.extent == nil)
         
         graph = builder.graph
         _added = builder._added
@@ -37,9 +37,6 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
         
         self.addComponents(from: builder)
         
-#if DEBUG
-        onExtentCreated?(self)
-#endif
     }
     
     deinit {
@@ -60,7 +57,7 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
         guard builder.graph === graph,
               status == .inactive
         else {
-            assertionFailure()
+            graph.assertionFailure()
             return
         }
 
@@ -96,7 +93,7 @@ open class BGExtent: Hashable, CustomDebugStringConvertible {
         }
         
         guard graph.processingChanges else {
-            assertionFailure("Can only remove behaviors during an event.")
+            graph.assertionFailure("Can only remove behaviors during an event.")
             return
         }
         
@@ -183,16 +180,12 @@ public class BGExtentBuilderGeneric: NSObject {
         let moment = BGMoment()
         
         if let extent = extent {
-            assert(extent.status == .inactive)
+            graph.assert(extent.status == .inactive)
             moment.owner = extent
             extent.resources.append(moment)
         } else {
             resources.append(moment)
         }
-        
-#if DEBUG
-        onResourceCreated?(moment)
-#endif
         
         return moment
     }
@@ -201,16 +194,12 @@ public class BGExtentBuilderGeneric: NSObject {
         let moment = BGTypedMoment<T>()
         
         if let extent = extent {
-            assert(extent.status == .inactive)
+            graph.assert(extent.status == .inactive)
             moment.owner = extent
             extent.resources.append(moment)
         } else {
             resources.append(moment)
         }
-        
-#if DEBUG
-        onResourceCreated?(moment)
-#endif
         
         return moment
     }
@@ -219,16 +208,12 @@ public class BGExtentBuilderGeneric: NSObject {
         let state = BGState(value, comparison: comparison)
         
         if let extent = extent {
-            assert(extent.status == .inactive)
+            graph.assert(extent.status == .inactive)
             state.owner = extent
             extent.resources.append(state)
         } else {
             resources.append(state)
         }
-        
-#if DEBUG
-        onResourceCreated?(state)
-#endif
         
         return state
     }
@@ -354,7 +339,8 @@ public class BGExtentBuilderGeneric: NSObject {
                 }
         }
         
-        let mainBehavior = BGBehavior(supplies: mainBehaviorStaticSupplies,
+        let mainBehavior = BGBehavior(graph: graph,
+                                      supplies: mainBehaviorStaticSupplies,
                                       demands: mainBehaviorStaticDemands,
                                       requiresMainThread: requiresMainThread) { extent in
             body(extent as! Extent)
@@ -362,7 +348,7 @@ public class BGExtentBuilderGeneric: NSObject {
         weakMainBehavior = mainBehavior
         
         if let extent = extent {
-            assert(extent.status == .inactive)
+            graph.assert(extent.status == .inactive)
             mainBehavior.owner = extent
             extent.behaviors.append(mainBehavior)
         } else {

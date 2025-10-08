@@ -39,7 +39,7 @@ public class BGBehavior {
     var graph: BGGraph? { owner?.graph }
     
     
-    init(supplies: [BGResource], demands: [BGDemandable], requiresMainThread: Bool, body: @escaping (BGExtent) -> Void) {
+    internal init(graph: BGGraph, supplies: [BGResource], demands: [BGDemandable], requiresMainThread: Bool, body: @escaping (BGExtent) -> Void) {
         self.requiresMainThread = requiresMainThread
         self.runBlock = body
         
@@ -49,7 +49,7 @@ public class BGBehavior {
         supplies.forEach {
             let resource = $0.asInternal
             guard resource.supplier == nil else {
-                assertionFailure("Resource is already supplied by a different behavior.")
+                graph.assertionFailure("Resource is already supplied by a different behavior.")
                 return
             }
             staticSupplies.insert(resource.weakReference)

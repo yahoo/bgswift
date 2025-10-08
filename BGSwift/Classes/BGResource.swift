@@ -98,7 +98,7 @@ extension BGResourceInternal {
         }
         
         if let currentBehavior = graph.currentRunningBehavior, currentBehavior !== supplier {
-            assert(currentBehavior.demands.first(where: { $0.resource === self }) != nil,
+            graph.assert(currentBehavior.demands.first(where: { $0.resource === self }) != nil,
                    "Accessed a resource in a behavior that was not declared as a demand.")
         }
     }
@@ -110,25 +110,25 @@ extension BGResourceInternal {
         }
         
         guard let currentEvent = graph.currentEvent else {
-            assertionFailure("Can only update a resource during an event.")
+            graph.assertionFailure("Can only update a resource during an event.")
             return .notUpdatable
         }
         
         guard let owner = owner else {
-            assertionFailure("Cannot update a resource that does not belong to an extent.")
+            graph.assertionFailure("Cannot update a resource that does not belong to an extent.")
             return .notUpdatable
         }
         
         if let behavior = supplier {
             
             guard graph.currentRunningBehavior === behavior else {
-                assertionFailure("Cannot update a resource with a supplying behavior during an action.")
+                graph.assertionFailure("Cannot update a resource with a supplying behavior during an action.")
                 return .notUpdatable
             }
         } else {
             if self !== owner._added {
                 guard graph.processingAction else {
-                    assertionFailure("Cannot update a resource with no supplying behaviour outside an action.")
+                    graph.assertionFailure("Cannot update a resource with no supplying behaviour outside an action.")
                     return .notUpdatable
                 }
             }
@@ -136,7 +136,7 @@ extension BGResourceInternal {
         
         guard _event.sequence < currentEvent.sequence else {
             // assert or fail?
-            assertionFailure("Can only update a resource once per event.")
+            graph.assertionFailure("Can only update a resource once per event.")
             return .notUpdatable
         }
         
@@ -349,7 +349,7 @@ public class BGState<Type>: BGResource, BGResourceInternal {
     var _prevValue: Type?
     private var comparison: ((_ lhs: Type, _ rhs: Type) -> Bool)?
     
-    init(_ value: Type, comparison: ((_ lhs: Type, _ rhs: Type) -> Bool)?) {
+    internal init(_ value: Type, comparison: ((_ lhs: Type, _ rhs: Type) -> Bool)?) {
         self.comparison = comparison
         self._value = value
         self._prevValue = value
@@ -379,6 +379,12 @@ public class BGState<Type>: BGResource, BGResourceInternal {
         } else {
             return false
         }
+    }
+    
+    func setInitialValue(_ value: Type) {
+        graph?.assert(owner == nil || owner?.status == .inactive)
+        _prevValue = value
+        _value = value
     }
     
     public func update(_ newValue: Type, forced: Bool = false) {

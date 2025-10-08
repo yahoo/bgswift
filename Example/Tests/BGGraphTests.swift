@@ -38,7 +38,7 @@ class BGGraphTests: XCTestCase {
         
         // |> When it is added to the graph
         // |> Then it will raise an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             e.addToGraphWithAction()
         }
     }
@@ -51,7 +51,7 @@ class BGGraphTests: XCTestCase {
         
         // |> When a behavior sets a static supply that is already supplied by another behavior
         // |> Then it will raise an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             b.behavior().supplies([rA]).runs { extent in
                 // nothing
             }
@@ -66,7 +66,7 @@ class BGGraphTests: XCTestCase {
         
         // |> When a behavior sets a dynamic supply that is already supplied by another behavior
         // |> Then it will raise an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             g.action {
                 bhv.setDynamicSupplies([self.rA])
             }
@@ -83,13 +83,13 @@ class BGGraphTests: XCTestCase {
         
         // |> When updating demands outside of event
         // |> Then there is an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             bhv.setDynamicDemands([rA])
         }
         
         // |> And when updating supplies outside of event
         // |> Then there is an error
-        TestAssertionHit {
+        TestAssertionHit(graph: g) {
             bhv.setDynamicSupplies([rB])
         }
     }
