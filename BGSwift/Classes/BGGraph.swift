@@ -52,6 +52,10 @@ public class BGGraph {
         eventLoopState?.processingAction ?? false
     }
     
+    var processingBehavior: Bool {
+        eventLoopState?.processingBehavior ?? false
+    }
+    
     private var _lastEvent: BGEvent
     public var lastEvent: BGEvent { _lastEvent }
     
@@ -81,7 +85,7 @@ public class BGGraph {
                         self.assertionFailure("Nested actions cannot be executed synchronously.")
                         return
                     }
-                    guard !processingChanges else {
+                    guard !processingBehavior else {
                         self.assertionFailure("Actions originating from behavior closures cannot be executed synchronously.")
                         return
                     }
@@ -155,9 +159,11 @@ public class BGGraph {
                                 let behaviorsToRun = mainThreadBehaviorsToRun
                                 mainThreadBehaviorsToRun.removeAll()
                                 
+                                eventLoopState.processingBehavior = true
                                 behaviorsToRun.forEach {
                                     runBehavior($0, sequence: eventLoopState.event.sequence)
                                 }
+                                eventLoopState.processingBehavior = false
                             }
                         }
 
@@ -219,9 +225,11 @@ public class BGGraph {
                                 }
                             }
                             
+                            eventLoopState.processingBehavior = true
                             behaviorsToRun.forEach {
                                 runBehavior($0, sequence: eventLoopState.event.sequence)
                             }
+                            eventLoopState.processingBehavior = false
                             
                             return
                         }
@@ -633,6 +641,7 @@ fileprivate class EventLoopState {
     let event: BGEvent
     var processingAction: Bool = true
     var processingChanges: Bool = true
+    var processingBehavior: Bool = false
     init(event: BGEvent) {
         self.event = event
     }
