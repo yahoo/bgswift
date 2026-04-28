@@ -345,4 +345,52 @@ class ConcurrencyTests: XCTestCase {
         XCTAssertEqual(behavior1RanOnMain, true)
         XCTAssertEqual(behavior2RanOnMain, false)
     }
+    
+    func testSwitchingToMainThreadForBehaviorWhenMainThreadActionAlreadyWaitingToRun() {
+        // We are testing a scenario where while the graph is running on a background thread, an action gets queued up on the
+        // main queue. For this test we explicitly dispatch async and then use the .sync sync strategy, but the same thing could
+        // happen using the .none sync strategy. In order to run the behavior that requires main thread, the background thread
+        // running the graph must give up the mutex and dispatch async onto the main thread. At this point the main thread action
+        // acquires the BG mutex and will add its action to the queue and pick up running the previous action.
+        
+        
+        let g = BGGraph()
+        let b = BGExtentBuilder(graph: g)
+        let r1 = b.moment()
+        
+        let behaviorRan = XCTestExpectation()
+        let secondActionFinished = XCTestExpectation()
+        
+        g.debugOnAssertionFailure = { message, _, _ in
+            XCTFail(message())
+        }
+        
+        b.behavior()
+            .demands(r1)
+            .requiresMainThread()
+            .runs { extent in
+                behaviorRan.fulfill()
+            }
+        
+        let e = BGExtent(builder: b)
+        e.addToGraphWithAction()
+        
+        DispatchQueue.global().async {
+            g.action {
+                
+                // Main thread action is dispatched while BG is running on a background thread
+                DispatchQueue.main.async {
+                    g.action(syncStrategy: .sync) {
+                        g.sideEffect {
+                            secondActionFinished.fulfill()
+                        }
+                    }
+                }
+                
+                r1.update()
+            }
+        }
+        
+        wait(for: [behaviorRan, secondActionFinished], timeout: ASYNC_EXPECTATION_TIMEOUT)
+    }
 }
